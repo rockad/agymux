@@ -1,21 +1,19 @@
-.PHONY: all install uninstall test
+.PHONY: all build install uninstall test
 
-all:
-	@echo "agymux: Generic Antigravity Terminal Multiplexer"
-	@echo "Run 'make install' to link binaries and configure tmux."
-	@echo "Run 'make uninstall' to cleanly revert all system state."
+all: build
 
-install:
-	@./install.sh
+build:
+	@cargo build --release
+
+install: build
+	@mkdir -p $(HOME)/.local/bin
+	@cp target/release/agymux $(HOME)/.local/bin/
+	@cp target/release/ax $(HOME)/.local/bin/
+	@echo "Installed agymux and ax to $(HOME)/.local/bin"
 
 uninstall:
-	@./uninstall.sh
+	@rm -f $(HOME)/.local/bin/agymux $(HOME)/.local/bin/ax
+	@echo "Removed agymux and ax from $(HOME)/.local/bin"
 
 test:
-	@bash -n bin/agymux
-	@bash -n lib/core/*.sh
-	@bash -n lib/ui/*.sh
-	@bash -n lib/daemon/*.sh
-	@bash -n install.sh
-	@bash -n uninstall.sh
-	@echo "Syntax verification passed."
+	@cargo test
