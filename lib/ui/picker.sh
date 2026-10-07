@@ -39,14 +39,13 @@ render_preview() {
     local p_project="${5:-}"
     local p_conv="${6:-}"
 
-    # If agymux-preview command exists and we have a conversation ID, prefer it
-    if [[ -n "$p_conv" && "$p_conv" != "__NEW__" ]] && command -v agymux-preview >/dev/null 2>&1; then
-        agymux-preview "$p_conv" 2>/dev/null && return 0
-    fi
-
-    # If lib/core/transcript.sh exists, delegate to it
-    if [[ -n "$p_conv" && "$p_conv" != "__NEW__" && -f "${SCRIPT_DIR}/../core/transcript.sh" ]]; then
-        "${SCRIPT_DIR}/../core/transcript.sh" preview "$p_conv" 2>/dev/null && return 0
+    # Render preview via agymux preview or direct transcript core helper
+    if [[ -n "$p_conv" && "$p_conv" != "__NEW__" ]]; then
+        if command -v agymux >/dev/null 2>&1; then
+            agymux preview "$p_conv" 2>/dev/null && return 0
+        elif [[ -f "${SCRIPT_DIR}/../core/transcript.sh" ]]; then
+            "${SCRIPT_DIR}/../core/transcript.sh" preview "$p_conv" 2>/dev/null && return 0
+        fi
     fi
 
     case "$p_type" in
@@ -374,7 +373,7 @@ IFS=$'\t' read -r _sel_disp sel_type sel_id sel_title sel_scope sel_proj sel_con
 case "$sel_type" in
     NEW)
         if [[ -n "${TMUX:-}" ]]; then
-            tmux new-window -c "$WORKDIR" -n "+ new" "agymux-tab-runner --project '${PROJECT}'"
+            tmux new-window -c "$WORKDIR" -n "+ new" "agymux run --project '${PROJECT}'"
         else
             command -v agymux >/dev/null 2>&1 && agymux new || agy --project "$PROJECT"
         fi
@@ -399,16 +398,16 @@ case "$sel_type" in
                 target_dir="${HOME}/projects/${target_project}"
                 [[ ! -d "$target_dir" ]] && target_dir="$WORKDIR"
                 tmux new-session -d -s "$target_sess" -c "$target_dir" -n "conv" \
-                    "agymux-tab-runner --project '${target_project}' --conversation '${sel_conv}'"
+                    "agymux run --project '${target_project}' --conversation '${sel_conv}'"
             else
                 tmux new-window -t "$target_sess" -n "conv" \
-                    "agymux-tab-runner --project '${target_project}' --conversation '${sel_conv}'"
+                    "agymux run --project '${target_project}' --conversation '${sel_conv}'"
             fi
             tmux switch-client -t "$target_sess"
         else
             if [[ -n "${TMUX:-}" ]]; then
                 tmux new-window -c "$WORKDIR" -n "conv" \
-                    "agymux-tab-runner --project '${PROJECT}' --conversation '${sel_conv}'"
+                    "agymux run --project '${PROJECT}' --conversation '${sel_conv}'"
             else
                 agy --project "$PROJECT" -c "$sel_conv"
             fi

@@ -81,7 +81,7 @@ if [[ -n "${TMUX:-}" ]]; then
         target_dir="${P_DIR:-${HOME}/projects/${P_NAME}}"
         [[ ! -d "$target_dir" ]] && target_dir="${PWD}"
         tmux new-session -d -s "${SESS_NAME}" -c "$target_dir" -n "main" \
-            "agymux-tab-runner --project '${P_NAME}' -c"
+            "agymux run --project '${P_NAME}' -c"
         tmux switch-client -t "=${SESS_NAME}"
     fi
 else
@@ -91,6 +91,6 @@ else
         target_dir="${P_DIR:-${HOME}/projects/${P_NAME}}"
         [[ ! -d "$target_dir" ]] && target_dir="${PWD}"
         exec tmux new-session -s "${SESS_NAME}" -c "$target_dir" -n "main" \
-            "agymux-tab-runner --project '${P_NAME}' -c"
+            "agymux run --project '${P_NAME}' -c"
     fi
 fi

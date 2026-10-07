@@ -57,7 +57,7 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tabs,
 make install
 # or ./install.sh
 ```
-Installs modular symlinks (`agymux`, `agymux-tab-picker`, `agymux-tab-runner`, `agymux-palette`, `agymux-project-picker`, `agymux-helper`, `agymux-preview`) into `~/.local/bin/` and wires `agymux-tabs.conf` in `~/.config/tmux/tmux.conf`.
+Installs the single entrypoint binary `agymux` into `~/.local/bin/agymux` and wires `agymux-tabs.conf` into `~/.config/tmux/tmux.conf`.
 
 ### Verify & Test
 ```bash
@@ -69,7 +69,7 @@ make test
 make uninstall
 # or ./uninstall.sh
 ```
-Cleans all symlinks, strips tmux directives, and leaves dotfiles pristine.
+Cleans `~/.local/bin/agymux`, strips tmux directives, and leaves dotfiles pristine.
 
 ---
 
@@ -78,9 +78,7 @@ Cleans all symlinks, strips tmux directives, and leaves dotfiles pristine.
 ```
 agymux/
 ├── bin/
-│   ├── agymux                     # Central entry point and subcommand dispatcher
-│   ├── agymux-tab-picker          # Two-pane picker entry point
-│   └── agymux-tab-runner          # Process runner & instant prompt naming
+│   └── agymux                     # Single entrypoint CLI (all subcommands routed here)
 ├── lib/
 │   ├── core/
 │   │   ├── project.sh             # Projects discovery across ~/projects/ & active agy-* sessions
@@ -93,7 +91,8 @@ agymux/
 │   │   ├── project-picker.sh      # Global project switcher modal
 │   │   └── theme.sh               # Monokai Pro Octagon palette tokens
 │   └── daemon/
-│       └── watcher.sh             # Background SQLite title watcher & prompt capture
+│       ├── runner.sh              # Subprocess runner & instant prompt-based naming
+│       └── watcher.sh             # Background SQLite title watcher
 ├── config/
 │   └── tmux/
 │       └── agymux-tabs.conf       # Top status line & bilingual keybindings

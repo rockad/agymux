@@ -13,8 +13,6 @@ uninstall:
 
 test:
 	@bash -n bin/agymux
-	@bash -n bin/agymux-tab-picker
-	@bash -n bin/agymux-tab-runner
 	@bash -n lib/core/*.sh
 	@bash -n lib/ui/*.sh
 	@bash -n lib/daemon/*.sh

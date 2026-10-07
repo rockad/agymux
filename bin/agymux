@@ -34,8 +34,13 @@ Usage: agymux [options] [command] [args...]
 
 Commands:
   attach [args...]      Attach to session (default) or run agy in current window
-  new, n [name] [args]  Open a new tab running agy
-  switch, s             Open tab/conversation picker popup (fzf)
+  switch, s             Open two-pane tab/conversation picker (fzf)
+  project, P            Open global project switcher modal
+  palette, pal          Open quick command palette modal
+  helper, ?             Display keyboard shortcuts cheatsheet modal
+  new, n [name] [args]  Open a new conversation tab
+  run [args...]         Internal process runner with instant prompt-based naming
+  preview <conv-id>     Render rich transcript preview (tokens, tools, prompt)
   ls, list              List active agymux sessions
   daemon <action>       Manage background systemd service
                         (enable|disable|start|stop|restart|status|logs|run)
@@ -75,16 +80,20 @@ if [[ ${#EXTRA_ARGS[@]} -gt 1 ]]; then
     CMD_ARGS=("${EXTRA_ARGS[@]:1}")
 fi
 
+has_tmux_client() {
+    [[ -n "${TMUX:-}" ]] && [[ -n "$(tmux display-message -p '#{client_name}' 2>/dev/null || true)" ]]
+}
+
 case "$CMD" in
     # ------------------------------------------------------------- switch / s --
     switch|s)
         if [[ -f "${LIB_DIR}/ui/picker.sh" ]]; then
             picker_cmd="${LIB_DIR}/ui/picker.sh '${PROJECT}' '${WORKDIR}'"
         else
-            picker_cmd="agymux-tab-picker '${PROJECT}' '${WORKDIR}'"
+            echo "Error: picker.sh not found." >&2; exit 1
         fi
 
-        if [[ -n "${TMUX:-}" ]]; then
+        if has_tmux_client; then
             tmux display-popup -E -w 85% -h 75% "$picker_cmd"
         else
             eval "$picker_cmd"
@@ -101,7 +110,7 @@ case "$CMD" in
             echo "Error: project-picker.sh not found." >&2; exit 1
         fi
 
-        if [[ -n "${TMUX:-}" ]]; then
+        if has_tmux_client; then
             tmux display-popup -E -w 85% -h 70% "$proj_cmd"
         else
             eval "$proj_cmd"
@@ -116,7 +125,7 @@ case "$CMD" in
             echo "Error: palette.sh not found." >&2; exit 1
         fi
 
-        if [[ -n "${TMUX:-}" ]]; then
+        if has_tmux_client; then
             tmux display-popup -E -w 75% -h 60% "$pal_cmd"
         else
             eval "$pal_cmd"
@@ -131,7 +140,7 @@ case "$CMD" in
             echo "Error: helper.sh not found." >&2; exit 1
         fi
 
-        if [[ -n "${TMUX:-}" ]]; then
+        if has_tmux_client; then
             tmux display-popup -E -w 75% -h 70% "$help_cmd"
         else
             eval "$help_cmd"
@@ -144,6 +153,15 @@ case "$CMD" in
             exec "${LIB_DIR}/core/transcript.sh" preview "${CMD_ARGS[@]}"
         else
             echo "Error: transcript.sh not found." >&2; exit 1
+        fi
+        ;;
+
+    # ------------------------------------------------------------------ run --
+    run|runner)
+        if [[ -f "${LIB_DIR}/daemon/runner.sh" ]]; then
+            exec "${LIB_DIR}/daemon/runner.sh" "${CMD_ARGS[@]}"
+        else
+            echo "Error: runner.sh not found." >&2; exit 1
         fi
         ;;
 
@@ -162,14 +180,14 @@ case "$CMD" in
 
         if [[ -n "${TMUX:-}" ]]; then
             tmux new-window -c "$WORKDIR" -n "$tab_name" \
-                "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+                "agymux run --project '${PROJECT}' ${tab_args[*]:-}"
         else
             if ! tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; then
                 tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "$tab_name" \
-                    "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+                    "agymux run --project '${PROJECT}' ${tab_args[*]:-}"
             else
                 tmux new-window -t "=${SESSION_NAME}:" -c "$WORKDIR" -n "$tab_name" \
-                    "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+                    "agymux run --project '${PROJECT}' ${tab_args[*]:-}"
                 tmux attach-session -t "=${SESSION_NAME}"
             fi
         fi
@@ -197,7 +215,7 @@ case "$CMD" in
                 # Headless runner loop supervised by systemd
                 if ! tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; then
                     tmux new-session -d -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
-                        "agymux-tab-runner --project '${PROJECT}' -c --dangerously-skip-permissions"
+                        "agymux run --project '${PROJECT}' -c --dangerously-skip-permissions"
                 fi
                 while tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; do
                     sleep 3
@@ -286,9 +304,9 @@ EOF
         # If inside tmux already: run agy directly to avoid nesting
         if [[ -n "${TMUX:-}" ]]; then
             if [[ "$CMD" == "attach" ]]; then
-                exec agymux-tab-runner --project "$PROJECT" -c
+                exec "$0" run --project "$PROJECT" -c
             else
-                exec agymux-tab-runner --project "$PROJECT" "$CMD" "${CMD_ARGS[@]}"
+                exec "$0" run --project "$PROJECT" "$CMD" "${CMD_ARGS[@]}"
             fi
         fi
 
@@ -298,10 +316,10 @@ EOF
         else
             if [[ "$CMD" == "attach" ]]; then
                 exec tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
-                    "agymux-tab-runner --project '${PROJECT}' -c"
+                    "agymux run --project '${PROJECT}' -c"
             else
                 exec tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
-                    "agymux-tab-runner --project '${PROJECT}' '$CMD' ${CMD_ARGS[*]:-}"
+                    "agymux run --project '${PROJECT}' '$CMD' ${CMD_ARGS[*]:-}"
             fi
         fi
         ;;

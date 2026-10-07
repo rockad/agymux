@@ -10,16 +10,14 @@ TMUX_CONF="${TMUX_CONF_DIR}/tmux.conf"
 
 echo "==> Installing agymux from ${REPO_DIR}..."
 
-# 1. Install binaries into ~/.local/bin
+# 1. Install single entrypoint binary into ~/.local/bin
 mkdir -p "$BIN_DIR"
-for b in agymux agymux-tab-picker agymux-tab-runner; do
-    echo "  -> Linking $b to $BIN_DIR/$b"
-    ln -sf "${REPO_DIR}/bin/$b" "${BIN_DIR}/$b"
+# Clean up any legacy secondary symlinks
+for legacy in agymux-tab-picker agymux-tab-runner agymux-palette agymux-project-picker agymux-helper agymux-preview; do
+    rm -f "${BIN_DIR}/$legacy"
 done
-ln -sf "${REPO_DIR}/lib/ui/palette.sh" "${BIN_DIR}/agymux-palette"
-ln -sf "${REPO_DIR}/lib/ui/project-picker.sh" "${BIN_DIR}/agymux-project-picker"
-ln -sf "${REPO_DIR}/lib/ui/helper.sh" "${BIN_DIR}/agymux-helper"
-ln -sf "${REPO_DIR}/lib/core/transcript.sh" "${BIN_DIR}/agymux-preview"
+echo "  -> Linking single entrypoint agymux to $BIN_DIR/agymux"
+ln -sf "${REPO_DIR}/bin/agymux" "${BIN_DIR}/agymux"
 
 # 2. Wire tmux configuration
 mkdir -p "$TMUX_CONF_DIR"

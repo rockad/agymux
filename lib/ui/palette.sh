@@ -46,7 +46,7 @@ action_new() {
     local project
     project="${AGYMUX_PROJECT:-$(basename "$PWD")}"
     if [[ -n "${TMUX:-}" ]]; then
-        tmux new-window -n "+ new" "agymux-tab-runner --project '${project}'"
+        tmux new-window -n "+ new" "agymux run --project '${project}'"
     else
         if command -v agymux >/dev/null 2>&1; then
             agymux new
@@ -72,7 +72,7 @@ action_fork() {
     if [[ -n "$conv_id" ]]; then
         local fork_title="[fork] ${curr_win:0:12}"
         if [[ -n "${TMUX:-}" ]]; then
-            tmux new-window -n "$fork_title" "agymux-tab-runner --project '${project}' --conversation '${conv_id}'"
+            tmux new-window -n "$fork_title" "agymux run --project '${project}' --conversation '${conv_id}'"
         else
             agy --project "$project" -c "$conv_id"
         fi
@@ -112,7 +112,7 @@ action_worktree() {
     local tab_name="[${branch}] new"
 
     if [[ -n "${TMUX:-}" ]]; then
-        tmux new-window -c "${wt_dir}" -n "$tab_name" "agymux-tab-runner --project '${project}'"
+        tmux new-window -c "${wt_dir}" -n "$tab_name" "agymux run --project '${project}'"
     else
         printf "  ${ANSI_ACTIVE_GREEN}✓ Worktree created at %s${ANSI_RESET}\n" "$wt_dir"
     fi
@@ -165,7 +165,7 @@ action_flags() {
     [[ "$selected_effort" != "default" ]] && flag_args+=(--effort "$selected_effort")
 
     if [[ -n "${TMUX:-}" ]]; then
-        tmux new-window -n "$tab_name" "agymux-tab-runner --project '${project}' ${flag_args[*]:-}"
+        tmux new-window -n "$tab_name" "agymux run --project '${project}' ${flag_args[*]:-}"
     else
         agy --project "$project" "${flag_args[@]}"
     fi
@@ -185,8 +185,8 @@ action_close() {
 action_switch() {
     if [[ -f "${SCRIPT_DIR}/picker.sh" ]]; then
         exec "${SCRIPT_DIR}/picker.sh"
-    elif command -v agymux-tab-picker >/dev/null 2>&1; then
-        exec agymux-tab-picker
+    elif command -v agymux >/dev/null 2>&1; then
+        exec agymux switch
     fi
 }
 
