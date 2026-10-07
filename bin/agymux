@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+# agymux: Generic Antigravity Terminal Multiplexer with OpenCode-style tabs
+
+set -euo pipefail
+
+PROJECT=""
+WORKDIR=""
+SESSION_NAME=""
+DIRECT=0
+
+# Parse global flags
+EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --project|-p)
+            PROJECT="$2"
+            shift 2
+            ;;
+        --dir|-C)
+            WORKDIR="$2"
+            shift 2
+            ;;
+        --session)
+            SESSION_NAME="$2"
+            shift 2
+            ;;
+        -d|--direct)
+            DIRECT=1
+            shift
+            ;;
+        *)
+            EXTRA_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+
+WORKDIR="${WORKDIR:-${PWD}}"
+PROJECT="${PROJECT:-${AGYMUX_PROJECT:-$(basename "$WORKDIR")}}}"
+SESSION_NAME="${SESSION_NAME:-agy-${PROJECT}}"
+
+# Escape hatch: direct execution without tmux
+if [[ $DIRECT -eq 1 ]]; then
+    exec agy --project "$PROJECT" --remote-control "${EXTRA_ARGS[@]}"
+fi
+
+# Subcommand dispatch
+CMD="${EXTRA_ARGS[0]:-attach}"
+CMD_ARGS=()
+if [[ ${#EXTRA_ARGS[@]} -gt 1 ]]; then
+    CMD_ARGS=("${EXTRA_ARGS[@]:1}")
+fi
+
+case "$CMD" in
+    # ------------------------------------------------------------- switch / s --
+    switch|s)
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux display-popup -E -w 80% -h 65% "agymux-tab-picker '${PROJECT}' '${WORKDIR}'"
+        else
+            agymux-tab-picker "${PROJECT}" "${WORKDIR}"
+        fi
+        ;;
+
+    # ---------------------------------------------------------------- new / n --
+    new|n)
+        tab_name="new-chat"
+        tab_args=()
+        if [[ ${#CMD_ARGS[@]} -gt 0 ]]; then
+            if [[ "${CMD_ARGS[0]}" != -* ]]; then
+                tab_name="${CMD_ARGS[0]}"
+                tab_args=("${CMD_ARGS[@]:1}")
+            else
+                tab_args=("${CMD_ARGS[@]}")
+            fi
+        fi
+
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux new-window -c "$WORKDIR" -n "$tab_name" \
+                "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+        else
+            if ! tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; then
+                tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "$tab_name" \
+                    "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+            else
+                tmux new-window -t "=${SESSION_NAME}:" -c "$WORKDIR" -n "$tab_name" \
+                    "agymux-tab-runner --project '${PROJECT}' ${tab_args[*]:-}"
+                tmux attach-session -t "=${SESSION_NAME}"
+            fi
+        fi
+        ;;
+
+    # -------------------------------------------------------------- ls / list --
+    ls|list)
+        active=$(tmux list-sessions -F "#{session_name} (#{?session_attached,attached,detached})" 2>/dev/null | grep "^agy-" || true)
+        if [[ -z "$active" ]]; then
+            echo "No active agymux sessions found."
+        else
+            echo "Active agymux sessions:"
+            echo "$active"
+        fi
+        ;;
+
+    # ----------------------------------------------------------------- daemon --
+    daemon)
+        action="${CMD_ARGS[0]:-status}"
+        svc="agymux@${PROJECT}.service"
+        svc_path="${HOME}/.config/systemd/user/${svc}"
+
+        case "$action" in
+            run|_run)
+                # Headless runner loop supervised by systemd
+                if ! tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; then
+                    tmux new-session -d -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
+                        "agymux-tab-runner --project '${PROJECT}' -c --dangerously-skip-permissions"
+                fi
+                while tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; do
+                    sleep 3
+                done
+                ;;
+            enable|install)
+                mkdir -p "${HOME}/.config/systemd/user"
+                cat <<EOF > "$svc_path"
+[Unit]
+Description=Antigravity Multiplexer Daemon (%I)
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=${WORKDIR}
+ExecStart=/usr/bin/env agymux --project %I --dir ${WORKDIR} daemon run
+ExecStop=/usr/bin/tmux kill-session -t agy-%I
+Restart=on-failure
+RestartSec=10s
+RestartPreventExitStatus=3
+TimeoutStopSec=30s
+StandardOutput=journal
+StandardError=journal
+Environment=PATH=${HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=TERM=xterm-256color
+
+[Install]
+WantedBy=default.target
+EOF
+                systemctl --user daemon-reload
+                systemctl --user enable "$svc"
+                echo "Installed and enabled ${svc}."
+                ;;
+            disable|uninstall)
+                systemctl --user stop "$svc" 2>/dev/null || true
+                systemctl --user disable "$svc" 2>/dev/null || true
+                if [[ -f "$svc_path" ]]; then
+                    rm -f "$svc_path"
+                    systemctl --user daemon-reload
+                    echo "Stopped, disabled, and removed ${svc_path}."
+                else
+                    echo "${svc} is already removed."
+                fi
+                ;;
+            start)
+                if [[ ! -f "$svc_path" ]]; then
+                    echo "Service not installed. Installing and enabling first..."
+                    "$0" --project "$PROJECT" --dir "$WORKDIR" daemon enable
+                fi
+                systemctl --user start "$svc"
+                systemctl --user status "$svc" --no-pager
+                ;;
+            stop)
+                systemctl --user stop "$svc"
+                systemctl --user status "$svc" --no-pager
+                ;;
+            restart)
+                if [[ ! -f "$svc_path" ]]; then
+                    echo "Service not installed. Installing and enabling first..."
+                    "$0" --project "$PROJECT" --dir "$WORKDIR" daemon enable
+                fi
+                systemctl --user restart "$svc"
+                systemctl --user status "$svc" --no-pager
+                ;;
+            status)
+                if [[ ! -f "$svc_path" ]]; then
+                    echo "Service ${svc} is not installed (run 'agymux daemon enable' to install)."
+                else
+                    systemctl --user status "$svc" --no-pager
+                fi
+                ;;
+            logs|log)
+                lines="${CMD_ARGS[1]:-50}"
+                journalctl --user -u "$svc" -n "$lines" -f
+                ;;
+            *)
+                echo "Usage: agymux daemon {start|stop|restart|status|enable|disable|logs [lines]|run}"
+                exit 1
+                ;;
+        esac
+        ;;
+
+    # ----------------------------------------------------- attach / default --
+    attach|*)
+        # If inside tmux already: run agy directly to avoid nesting
+        if [[ -n "${TMUX:-}" ]]; then
+            if [[ "$CMD" == "attach" ]]; then
+                exec agymux-tab-runner --project "$PROJECT" -c
+            else
+                exec agymux-tab-runner --project "$PROJECT" "$CMD" "${CMD_ARGS[@]}"
+            fi
+        fi
+
+        # Outside tmux: attach to existing session or create it
+        if tmux has-session -t "=${SESSION_NAME}" 2>/dev/null; then
+            exec tmux attach-session -t "=${SESSION_NAME}"
+        else
+            if [[ "$CMD" == "attach" ]]; then
+                exec tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
+                    "agymux-tab-runner --project '${PROJECT}' -c"
+            else
+                exec tmux new-session -s "${SESSION_NAME}" -c "$WORKDIR" -n "main" \
+                    "agymux-tab-runner --project '${PROJECT}' '$CMD' ${CMD_ARGS[*]:-}"
+            fi
+        fi
+        ;;
+esac
