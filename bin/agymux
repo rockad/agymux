@@ -28,6 +28,27 @@ while [[ $# -gt 0 ]]; do
             DIRECT=1
             shift
             ;;
+        -h|--help|help)
+            cat <<'EOF'
+Usage: agymux [options] [command] [args...]
+
+Commands:
+  attach [args...]      Attach to session (default) or run agy in current window
+  new, n [name] [args]  Open a new tab running agy
+  switch, s             Open tab/conversation picker popup (fzf)
+  ls, list              List active agymux sessions
+  daemon <action>       Manage background systemd service
+                        (enable|disable|start|stop|restart|status|logs|run)
+
+Options:
+  -p, --project <name>  Project name (default: directory basename)
+  -C, --dir <path>      Working directory (default: current directory)
+      --session <name>  Custom tmux session name (default: agy-<project>)
+  -d, --direct          Direct execution without tmux (e.g. for agy help)
+  -h, --help            Show this help message
+EOF
+            exit 0
+            ;;
         *)
             EXTRA_ARGS+=("$1")
             shift
