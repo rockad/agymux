@@ -1,19 +1,52 @@
-# agymux
+# agymux v0.2
 
-**agymux** is a generic, project-agnostic terminal multiplexer that equips Google Antigravity (`agy`) with an **OpenCode-style tabbed multi-conversation UI** inside `tmux`.
+**agymux** is a generic, project-agnostic terminal multiplexer that equips Google Antigravity (`agy`) with an **OpenCode-style tabbed multi-conversation cockpit** inside `tmux`.
+
+It combines OpenCode's visual delight and spatial workflow ergonomics (top tabs, two-pane switcher, command palette, git worktree isolation) with Antigravity's deep autonomous engine and 100% ToS-compliant local execution.
 
 ---
 
 ## Features
 
-- **OpenCode Top Tab Bar**: Visual tab strip positioned at the **top** of the screen (`status-position top`) styled in Monokai Pro Octagon (`[1: job-search]  [2: ssh-sessions]*  [+ 3: new]`).
-- **Dynamic Auto-Title Renaming**: Automatically monitors Antigravity's SQLite database (`conversation_summaries.db`) and renames tmux tabs to match assigned conversation titles.
-- **Floating Modal Switcher**: Press `Ctrl+Space s` (or run `agymux switch`) to open a centered, floating `fzf` modal listing all open tabs and past project conversations.
-- **Direct Tab Switching**:
-  - `Alt+1` .. `Alt+9`: Instant jump to tab index (no prefix chord needed).
-  - `Alt+Left` / `Alt+Right`: Cycle adjacent tabs.
-- **Project Agnostic**: Automatically scopes sessions by directory basename (`agy-<project>`), with explicit overrides via `--project <name>`.
-- **Clean Lifecycle**: Zero-dependency `make install` and `make uninstall` scripts.
+- **Monokai Pro Octagon Top Tabs**: Visual tab strip positioned at the **top** of the screen (`status-position top`) styled in `#282a3a` warm dark grey with rounded Powerline pill caps (`` / ``), unread indicators, and active turn spinners (`●`).
+- **Two-Pane Conversation Switcher**: Press `Ctrl+Space s` (or `ы`) to open a centered, floating `fzf` modal with:
+  - **Left Pane (45%)**: Active open tabs and historical project conversations. Supports `Tab` or `Ctrl+A` to toggle between **Local Project** and **Global Machine** search scope.
+  - **Right Pane (55%)**: Instant live transcript preview ($< 15\text{ ms}$) showing token counts, initial user prompt, latest turn summary, and executed tool breakdowns.
+- **Global Project Hopper**: Press `Ctrl+Space P` (or `З`) to search and switch between repositories across `~/projects/` and running `agy-*` sessions.
+- **Quick Command Palette**: Press `Ctrl+Space p` (or `з`) to open the action menu (tab rename, fork, new worktree, model flags, cheatsheet).
+- **Git Worktree Isolation**: Create on-demand git worktrees under `.worktrees/<branch>` via `Ctrl+Space w` (or `ц`) to isolate parallel agent write sets.
+- **Dual-Access Architecture**: Every operation is executable **both** via direct keyboard shortcuts and from the Command Palette.
+- **Bilingual Keymap Resilience**: Every letter shortcut features paired English and Cyrillic (RussianWin) bindings so CapsLock layout switching never produces dead keys.
+- **Instant Prompt-Based Naming**: Tabs are named immediately from the first prompt argument (e.g. `dga "fix the auth bug"`), upgraded smoothly in the background when Antigravity writes semantic titles to SQLite.
+- **Zero Quota Overhead**: Powered by pure UNIX CLI tools (`jq`, `fzf`, `sqlite3`). Spawns zero Python processes and consumes zero Gemini subscription tokens for UI navigation.
+
+---
+
+## Dual-Access Shortcuts Cheatsheet
+
+| Action | Direct Shortcut | Command Palette Name |
+| :--- | :--- | :--- |
+| **Switch Tab / Session** | `Ctrl+Space s` / `ы` | `🗂️ Switch Tab / Session` |
+| **Switch Project** | `Ctrl+Space P` / `З` | `🌐 Switch Project` |
+| **Command Palette** | `Ctrl+Space p` / `з` | `⚙️ Open Command Palette` |
+| **Keyboard Cheatsheet** | `Ctrl+Space ?` / `h` / `р` | `❓ Keyboard Shortcuts & Help` |
+| **New Tab** | `Ctrl+Space c` / `с` | `➕ New Tab` |
+| **New Worktree Tab** | `Ctrl+Space w` / `ц` | `📁 New Worktree Tab (Branch)` |
+| **Rename Active Tab** | `Ctrl+Space r` / `к` | `📝 Rename Active Tab` |
+| **Fork Conversation** | `Ctrl+Space f` / `а` | `🌿 Fork Conversation (-c)` |
+| **Launch with Custom Flags** | `Ctrl+Space l` / `д` | `⚙️ Launch with Custom Flags` |
+| **Close Tab** | `Ctrl+Space x` / `ч` | `🧹 Close Tab` |
+| **Detach Session** | `Ctrl+Space d` / `в` | `🚪 Detach Session` |
+| **Direct Tab Jump** | `Alt+1` .. `Alt+9` | N/A |
+| **Cycle Adjacent Tabs** | `Alt+Left` / `Alt+Right` | N/A |
+
+---
+
+## Inside the Two-Pane Switcher (`Ctrl+Space s`)
+
+- `Tab` or `Ctrl+A`: Toggle search scope between **Local Project** (current active tabs + repo history) and **Global Machine** (all repositories across `~/projects/`).
+- `Enter`: Switch to selected tab or resume historical conversation.
+- `Esc`: Cancel and return to terminal.
 
 ---
 
@@ -24,51 +57,48 @@
 make install
 # or ./install.sh
 ```
-Links executables to `~/.local/bin/` and sources `agymux-tabs.conf` in `~/.config/tmux/tmux.conf`.
+Installs modular symlinks (`agymux`, `agymux-tab-picker`, `agymux-tab-runner`, `agymux-palette`, `agymux-project-picker`, `agymux-helper`, `agymux-preview`) into `~/.local/bin/` and wires `agymux-tabs.conf` in `~/.config/tmux/tmux.conf`.
+
+### Verify & Test
+```bash
+make test
+```
 
 ### Uninstall
 ```bash
 make uninstall
 # or ./uninstall.sh
 ```
-Removes all symlinks, strips configuration directives, and leaves the system in a pristine state.
+Cleans all symlinks, strips tmux directives, and leaves dotfiles pristine.
 
 ---
 
-## Keybindings Cheatsheet
+## Architecture & Codebase Structure
 
-| Shortcut | Action |
-| :--- | :--- |
-| `Alt+1` .. `Alt+9` | Direct jump to tab 1 through 9 |
-| `Alt+Left` / `Alt+Right` | Cycle between previous / next conversation tab |
-| `Ctrl+Space s` (or `agymux s`) | Open floating conversation picker (fzf popup modal) |
-| `Ctrl+Space c` (or `agymux n`) | Open a new conversation tab (`+ new`) |
-| `Ctrl+Space x` | Close current conversation tab |
-| `Ctrl+\` | Instant detach (keeps background daemon & all tabs running) |
-
----
-
-## CLI Usage
-
-```bash
-# Attach or start session for current directory
-agymux
-
-# Scope explicitly to a project
-agymux --project doppelganger
-
-# Open floating switcher
-agymux switch
-
-# Open new conversation tab
-agymux new [optional-tab-name]
-
-# List active agymux sessions
-agymux ls
-
-# Systemd daemon management
-agymux daemon status
-agymux daemon enable
-agymux daemon start
-agymux daemon stop
+```
+agymux/
+├── bin/
+│   ├── agymux                     # Central entry point and subcommand dispatcher
+│   ├── agymux-tab-picker          # Two-pane picker entry point
+│   └── agymux-tab-runner          # Process runner & instant prompt naming
+├── lib/
+│   ├── core/
+│   │   ├── project.sh             # Projects discovery across ~/projects/ & active agy-* sessions
+│   │   ├── session.sh             # SQLite queries against conversation_summaries.db
+│   │   └── transcript.sh          # JSONL parser for rich turn preview & token counts (jq)
+│   ├── ui/
+│   │   ├── helper.sh              # Interactive shortcuts cheatsheet modal
+│   │   ├── palette.sh             # Command palette modal & action handlers
+│   │   ├── picker.sh              # Two-pane fzf modal (45% list / 55% preview)
+│   │   ├── project-picker.sh      # Global project switcher modal
+│   │   └── theme.sh               # Monokai Pro Octagon palette tokens
+│   └── daemon/
+│       └── watcher.sh             # Background SQLite title watcher & prompt capture
+├── config/
+│   └── tmux/
+│       └── agymux-tabs.conf       # Top status line & bilingual keybindings
+├── install.sh
+├── uninstall.sh
+├── Makefile
+└── README.md
 ```

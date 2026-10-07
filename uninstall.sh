@@ -10,7 +10,7 @@ TMUX_TABS_CONF="${HOME}/.config/tmux/agymux-tabs.conf"
 echo "==> Uninstalling agymux..."
 
 # 1. Remove binaries from ~/.local/bin
-for b in agymux agymux-tab-picker agymux-tab-runner; do
+for b in agymux agymux-tab-picker agymux-tab-runner agymux-palette agymux-project-picker agymux-helper agymux-preview; do
     if [[ -L "$BIN_DIR/$b" || -f "$BIN_DIR/$b" ]]; then
         echo "  -> Removing $BIN_DIR/$b"
         rm -f "$BIN_DIR/$b"

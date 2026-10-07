@@ -16,6 +16,10 @@ for b in agymux agymux-tab-picker agymux-tab-runner; do
     echo "  -> Linking $b to $BIN_DIR/$b"
     ln -sf "${REPO_DIR}/bin/$b" "${BIN_DIR}/$b"
 done
+ln -sf "${REPO_DIR}/lib/ui/palette.sh" "${BIN_DIR}/agymux-palette"
+ln -sf "${REPO_DIR}/lib/ui/project-picker.sh" "${BIN_DIR}/agymux-project-picker"
+ln -sf "${REPO_DIR}/lib/ui/helper.sh" "${BIN_DIR}/agymux-helper"
+ln -sf "${REPO_DIR}/lib/core/transcript.sh" "${BIN_DIR}/agymux-preview"
 
 # 2. Wire tmux configuration
 mkdir -p "$TMUX_CONF_DIR"

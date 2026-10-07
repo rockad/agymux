@@ -56,6 +56,9 @@ EOF
     esac
 done
 
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/../lib"
+
 WORKDIR="${WORKDIR:-${PWD}}"
 PROJECT="${PROJECT:-${AGYMUX_PROJECT:-$(basename "$WORKDIR")}}}"
 SESSION_NAME="${SESSION_NAME:-agy-${PROJECT}}"
@@ -75,10 +78,72 @@ fi
 case "$CMD" in
     # ------------------------------------------------------------- switch / s --
     switch|s)
-        if [[ -n "${TMUX:-}" ]]; then
-            tmux display-popup -E -w 80% -h 65% "agymux-tab-picker '${PROJECT}' '${WORKDIR}'"
+        if [[ -f "${LIB_DIR}/ui/picker.sh" ]]; then
+            picker_cmd="${LIB_DIR}/ui/picker.sh '${PROJECT}' '${WORKDIR}'"
         else
-            agymux-tab-picker "${PROJECT}" "${WORKDIR}"
+            picker_cmd="agymux-tab-picker '${PROJECT}' '${WORKDIR}'"
+        fi
+
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux display-popup -E -w 85% -h 75% "$picker_cmd"
+        else
+            eval "$picker_cmd"
+        fi
+        ;;
+
+    # ----------------------------------------------------------- project / P --
+    project|P)
+        if [[ -f "${LIB_DIR}/ui/project-picker.sh" ]]; then
+            proj_cmd="${LIB_DIR}/ui/project-picker.sh"
+        elif [[ -f "${LIB_DIR}/core/project.sh" ]]; then
+            proj_cmd="${LIB_DIR}/core/project.sh list"
+        else
+            echo "Error: project-picker.sh not found." >&2; exit 1
+        fi
+
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux display-popup -E -w 85% -h 70% "$proj_cmd"
+        else
+            eval "$proj_cmd"
+        fi
+        ;;
+
+    # ----------------------------------------------------------- palette / p --
+    palette|pal)
+        if [[ -f "${LIB_DIR}/ui/palette.sh" ]]; then
+            pal_cmd="${LIB_DIR}/ui/palette.sh ${CMD_ARGS[*]:-}"
+        else
+            echo "Error: palette.sh not found." >&2; exit 1
+        fi
+
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux display-popup -E -w 75% -h 60% "$pal_cmd"
+        else
+            eval "$pal_cmd"
+        fi
+        ;;
+
+    # ------------------------------------------------------------ helper / ? --
+    helper|help-keys|cheatsheet)
+        if [[ -f "${LIB_DIR}/ui/helper.sh" ]]; then
+            help_cmd="${LIB_DIR}/ui/helper.sh"
+        else
+            echo "Error: helper.sh not found." >&2; exit 1
+        fi
+
+        if [[ -n "${TMUX:-}" ]]; then
+            tmux display-popup -E -w 75% -h 70% "$help_cmd"
+        else
+            eval "$help_cmd"
+        fi
+        ;;
+
+    # --------------------------------------------------------------- preview --
+    preview)
+        if [[ -f "${LIB_DIR}/core/transcript.sh" ]]; then
+            exec "${LIB_DIR}/core/transcript.sh" preview "${CMD_ARGS[@]}"
+        else
+            echo "Error: transcript.sh not found." >&2; exit 1
         fi
         ;;
 
