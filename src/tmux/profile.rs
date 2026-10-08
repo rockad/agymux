@@ -32,6 +32,7 @@ impl TmuxProfile {
         lines.push("# agymux dynamic tmux configuration".to_string());
         lines.push("set -g default-terminal \"tmux-256color\"".to_string());
         lines.push("set -ga terminal-overrides \",*256col*:Tc\"".to_string());
+        lines.push("set -ga terminal-features \",xterm-ghostty:RGB:sync:cstyle:ccolour\"".to_string());
         lines.push("set -s escape-time 0".to_string());
         lines.push("set -g focus-events on".to_string());
         lines.push("set -g mouse on".to_string());
@@ -41,7 +42,7 @@ impl TmuxProfile {
 
         // Status bar layout
         lines.push(format!("set -g status-position {}", position));
-        lines.push("set -g status-interval 5".to_string());
+        lines.push("set -g status-interval 10".to_string());
         lines.push(format!("set -g status-style \"bg={},fg={}\"", bg, fg));
         lines.push("set -g status-left-length 40".to_string());
         lines.push("set -g status-right-length 60".to_string());
