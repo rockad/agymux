@@ -91,6 +91,8 @@ pub enum Commands {
         project: String,
         #[arg(long)]
         start_time: String,
+        #[arg(long)]
+        exclude_id: Option<String>,
     },
 }
 

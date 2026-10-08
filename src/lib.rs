@@ -127,8 +127,8 @@ pub fn run() -> Result<()> {
             run_ls()?;
         }
 
-        Some(Commands::Watch { window, project, start_time }) => {
-            run_watcher(&window, &project, &start_time)?;
+        Some(Commands::Watch { window, project, start_time, exclude_id }) => {
+            run_watcher(&window, &project, &start_time, exclude_id.as_deref())?;
         }
     }
 
@@ -247,19 +247,42 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
+    let latest_existing_id = {
+        let db_path = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".gemini/antigravity-cli/conversation_summaries.db");
+        if db_path.exists() {
+            rusqlite::Connection::open(&db_path)
+                .ok()
+                .and_then(|conn| {
+                    conn.query_row(
+                        "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                        [],
+                        |r| r.get::<_, String>(0),
+                    ).ok()
+                })
+        } else {
+            None
+        }
+    };
+
     // 2. Background detached watcher process for automatic title sync on new conversations
     if in_tmux && conv_id.is_none() {
         if let Some(ref win) = target_window {
-            let _ = Command::new("agymux")
-                .args([
-                    "watch",
-                    "--window",
-                    win,
-                    "--project",
-                    project,
-                    "--start-time",
-                    &start_time,
-                ])
+            let mut watch_cmd = Command::new("agymux");
+            watch_cmd.args([
+                "watch",
+                "--window",
+                win,
+                "--project",
+                project,
+                "--start-time",
+                &start_time,
+            ]);
+            if let Some(ref ex_id) = latest_existing_id {
+                watch_cmd.args(["--exclude-id", ex_id]);
+            }
+            let _ = watch_cmd
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
                 .stderr(std::process::Stdio::null())
@@ -298,7 +321,12 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
 }
 
 /// Detached background watcher that polls SQLite for a newly created conversation and renames the window
-fn run_watcher(target_window: &str, project: &str, start_time: &str) -> Result<()> {
+fn run_watcher(
+    target_window: &str,
+    project: &str,
+    start_time: &str,
+    exclude_id: Option<&str>,
+) -> Result<()> {
     let db_path = dirs::home_dir()
         .unwrap_or_default()
         .join(".gemini/antigravity-cli/conversation_summaries.db");
@@ -306,8 +334,8 @@ fn run_watcher(target_window: &str, project: &str, start_time: &str) -> Result<(
     let proj = project.to_string();
     let pattern = format!("%{}%", proj);
 
-    for _ in 0..80 {
-        thread::sleep(Duration::from_secs(3));
+    for _ in 0..120 {
+        thread::sleep(Duration::from_millis(500));
         if !db_path.exists() {
             continue;
         }
@@ -318,13 +346,14 @@ fn run_watcher(target_window: &str, project: &str, start_time: &str) -> Result<(
                 FROM conversation_summaries 
                 WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
                   AND last_modified_time >= ?3
+                  AND (?4 IS NULL OR conversation_id != ?4)
                   AND title IS NOT NULL AND title != ''
                 ORDER BY last_modified_time DESC 
                 LIMIT 1;
             ";
             if let Ok(mut stmt) = conn.prepare(sql) {
                 if let Ok((cid, title)) = stmt.query_row(
-                    rusqlite::params![pattern, proj, start_time],
+                    rusqlite::params![pattern, proj, start_time, exclude_id],
                     |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
                 ) {
                     let _ = Command::new("tmux")

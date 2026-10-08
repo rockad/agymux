@@ -94,7 +94,7 @@ impl TmuxProfile {
         lines.push("bind h display-popup -E -w 65% -h 70% \"agymux helper\"".to_string());
 
         // Tab management
-        lines.push("bind c new-window -c \"#{pane_current_path}\" \"agymux run\"".to_string());
+        lines.push("bind c new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\"".to_string());
         lines.push("bind x kill-window".to_string());
         lines.push("bind d detach-client".to_string());
         lines.push("bind r refresh-client".to_string());
@@ -107,7 +107,7 @@ impl TmuxProfile {
             lines.push("bind З display-popup -E -w 70% -h 70% \"agymux project\"".to_string());
             lines.push("bind з display-popup -E -w 60% -h 65% \"agymux palette\"".to_string());
             lines.push("bind р display-popup -E -w 65% -h 70% \"agymux helper\"".to_string());
-            lines.push("bind с new-window -c \"#{pane_current_path}\" \"agymux run\"".to_string());
+            lines.push("bind с new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\"".to_string());
             lines.push("bind ч kill-window".to_string());
             lines.push("bind в detach-client".to_string());
             lines.push("bind к refresh-client".to_string());
