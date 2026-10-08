@@ -10,7 +10,6 @@ use cli::{Cli, Commands, DaemonAction};
 use config::Config;
 use std::{
     fs,
-    io::{self, BufRead},
     path::{Path, PathBuf},
     process::Command,
     sync::atomic::{AtomicBool, Ordering},
@@ -148,14 +147,23 @@ fn handle_attach(
 ) -> Result<()> {
     if std::env::var("TMUX").is_ok() {
         let mut cmd = Command::new("agy");
-        cmd.args(["--project", project, "--remote-control"]);
+        cmd.args(["--project", project]);
         if !args.is_empty() {
             cmd.args(args);
         } else {
             cmd.arg("-c");
         }
-        let status = cmd.status()?;
-        std::process::exit(status.code().unwrap_or(0));
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let err = cmd.exec();
+            bail!("Failed to execute agy: {}", err);
+        }
+        #[cfg(not(unix))]
+        {
+            let status = cmd.status()?;
+            std::process::exit(status.code().unwrap_or(0));
+        }
     }
 
     if tmux::TmuxDriver::session_exists(session_name) {
@@ -283,31 +291,32 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
 
     // 3. Assemble and execute agy
     let mut cmd = Command::new("agy");
-    cmd.args(["--project", project, "--remote-control"]);
+    cmd.args(["--project", project]);
     if !args.is_empty() {
         cmd.args(&args);
     }
 
-    let status = cmd.status();
-    stop_watcher.store(true, Ordering::Relaxed);
-
-    let code = match status {
-        Ok(s) => s.code().unwrap_or(0),
-        Err(e) => {
-            eprintln!("Failed to execute agy: {}", e);
-            1
-        }
-    };
-
-    if code != 0 && in_tmux {
-        println!("\n[agy exited with status {}]", code);
-        println!("Press Enter to close window...");
-        let stdin = io::stdin();
-        let mut line = String::new();
-        let _ = stdin.lock().read_line(&mut line);
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        let err = cmd.exec();
+        eprintln!("Failed to execute agy: {}", err);
+        std::process::exit(1);
     }
 
-    std::process::exit(code);
+    #[cfg(not(unix))]
+    {
+        let status = cmd.status();
+        stop_watcher.store(true, Ordering::Relaxed);
+        let code = match status {
+            Ok(s) => s.code().unwrap_or(0),
+            Err(e) => {
+                eprintln!("Failed to execute agy: {}", e);
+                1
+            }
+        };
+        std::process::exit(code);
+    }
 }
 
 /// Print formatted transcript preview to stdout
