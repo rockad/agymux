@@ -46,22 +46,21 @@ impl TmuxProfile {
         lines.push("set -g status-left-length 40".to_string());
         lines.push("set -g status-right-length 60".to_string());
 
-        // Status Left: Prefix indicator & session name
+        let purple = "#ab9df2";
+
+        // Status Left: Prefix indicator & session name (NO commas inside style brackets)
         let status_left = format!(
-            "#[bg={},fg={},bold] #S #[bg={},fg={}]#{p_alert} ",
-            bg, fg, bg, fg,
-            p_alert = format!("?client_prefix,#[fg={},bold] PREFIX ,#[fg={}][NORMAL]", prefix_alert, inactive_fg)
+            "#{{?client_prefix,#[fg={prefix_alert}]#[bg={bg}]#[bg={prefix_alert}]#[fg={bg}]#[bold] 󰘳 PREFIX #[fg={prefix_alert}]#[bg={bg}] ,#[fg={purple}]#[bg={bg}]#[bg={purple}]#[fg={bg}]#[bold] #S #[fg={purple}]#[bg={bg}] }}"
         );
         lines.push(format!("set -g status-left \"{}\"", status_left));
 
-        // Window status format
+        // Window status format with rounded pills
+        lines.push("setw -g window-status-separator \" \"".to_string());
         let window_format = format!(
-            "#[fg={},bg={}] #I #[fg={},bg={}] #W ",
-            inactive_fg, inactive_bg, fg, inactive_bg
+            "#[fg={inactive_bg}]#[bg={bg}]#[bg={inactive_bg}]#[fg={inactive_fg}] #I #W #[fg={inactive_bg}]#[bg={bg}]"
         );
         let active_window_format = format!(
-            "#[fg={},bg={}]#[fg={},bg={},bold]#I:#W#[fg={},bg={}]",
-            active_accent, bg, active_text, active_accent, active_accent, bg
+            "#[fg={active_accent}]#[bg={bg}]#[bg={active_accent}]#[fg={active_text}]#[bold] #I #W #[fg={active_accent}]#[bg={bg}]"
         );
 
         lines.push(format!("setw -g window-status-format \"{}\"", window_format));
