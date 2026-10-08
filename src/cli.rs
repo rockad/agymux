@@ -92,28 +92,10 @@ pub enum Commands {
         #[arg(long)]
         start_time: String,
     },
-
-    /// Manage background systemd user daemon
-    Daemon {
-        #[command(subcommand)]
-        action: DaemonAction,
-    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScopeArg {
     Local,
     Global,
-}
-
-#[derive(Subcommand, Debug, Clone)]
-pub enum DaemonAction {
-    /// Start or enable the agymux daemon
-    Start,
-    /// Stop the agymux daemon
-    Stop,
-    /// Restart the agymux daemon
-    Restart,
-    /// Check daemon status
-    Status,
 }

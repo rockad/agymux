@@ -6,10 +6,9 @@ pub mod ui;
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use cli::{Cli, Commands, DaemonAction};
+use cli::{Cli, Commands};
 use config::Config;
 use std::{
-    fs,
     path::{Path, PathBuf},
     process::Command,
     thread,
@@ -39,7 +38,7 @@ pub fn run() -> Result<()> {
     // Direct execution without tmux
     if cli.direct {
         let mut cmd = Command::new("agy");
-        cmd.args(["--project", &project, "--remote-control"]);
+        cmd.args(["--project", &project]);
         let status = cmd.status()?;
         std::process::exit(status.code().unwrap_or(0));
     }
@@ -130,10 +129,6 @@ pub fn run() -> Result<()> {
 
         Some(Commands::Watch { window, project, start_time }) => {
             run_watcher(&window, &project, &start_time)?;
-        }
-
-        Some(Commands::Daemon { action }) => {
-            run_daemon(&project, &dir, action)?;
         }
     }
 
@@ -428,80 +423,6 @@ fn run_ls() -> Result<()> {
         println!("Active agymux sessions:");
         for s in active {
             println!("  {}", s);
-        }
-    }
-
-    Ok(())
-}
-
-/// Manage background systemd user daemon
-fn run_daemon(project: &str, dir: &Path, action: DaemonAction) -> Result<()> {
-    let svc = format!("agymux@{}.service", project);
-    let systemd_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("systemd/user");
-    let svc_path = systemd_dir.join(&svc);
-
-    let ensure_installed = || -> Result<()> {
-        if !svc_path.exists() {
-            fs::create_dir_all(&systemd_dir)?;
-            let home = dirs::home_dir().unwrap_or_default().display().to_string();
-            let unit_content = format!(
-                r#"[Unit]
-Description=Antigravity Multiplexer Daemon (%I)
-After=network.target
-StartLimitIntervalSec=0
-
-[Service]
-Type=simple
-WorkingDirectory={}
-ExecStart=/usr/bin/env agymux --project %I --dir {} daemon run
-ExecStop=/usr/bin/tmux kill-session -t agy-%I
-Restart=on-failure
-RestartSec=10s
-RestartPreventExitStatus=3
-TimeoutStopSec=30s
-StandardOutput=journal
-StandardError=journal
-Environment=PATH={}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-Environment=TERM=xterm-256color
-
-[Install]
-WantedBy=default.target
-"#,
-                dir.display(),
-                dir.display(),
-                home
-            );
-            fs::write(&svc_path, unit_content)?;
-            let _ = Command::new("systemctl").args(["--user", "daemon-reload"]).status();
-            let _ = Command::new("systemctl").args(["--user", "enable", &svc]).status();
-            println!("Installed and enabled {}.", svc);
-        }
-        Ok(())
-    };
-
-    match action {
-        DaemonAction::Start => {
-            ensure_installed()?;
-            let _ = Command::new("systemctl").args(["--user", "start", &svc]).status();
-            let _ = Command::new("systemctl").args(["--user", "status", &svc, "--no-pager"]).status();
-        }
-        DaemonAction::Stop => {
-            let _ = Command::new("systemctl").args(["--user", "stop", &svc]).status();
-            let _ = Command::new("systemctl").args(["--user", "status", &svc, "--no-pager"]).status();
-        }
-        DaemonAction::Restart => {
-            ensure_installed()?;
-            let _ = Command::new("systemctl").args(["--user", "restart", &svc]).status();
-            let _ = Command::new("systemctl").args(["--user", "status", &svc, "--no-pager"]).status();
-        }
-        DaemonAction::Status => {
-            if !svc_path.exists() {
-                println!("Service {} is not installed.", svc);
-            } else {
-                let _ = Command::new("systemctl").args(["--user", "status", &svc, "--no-pager"]).status();
-            }
         }
     }
 

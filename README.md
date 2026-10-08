@@ -91,7 +91,6 @@ Commands:
   run      Internal process runner with instant prompt-based window naming
   preview  Render rich preview for a conversation ID
   ls       List active agymux sessions
-  daemon   Manage background systemd user daemon
   help     Print help
 
 Options:

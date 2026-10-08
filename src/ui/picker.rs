@@ -876,7 +876,7 @@ pub fn execute_selection(
                     .status();
             } else {
                 let _ = Command::new("agy")
-                    .args(["--project", project, "--remote-control"])
+                    .args(["--project", project])
                     .status();
             }
         }
