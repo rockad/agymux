@@ -42,7 +42,7 @@ impl TmuxProfile {
 
         // Status bar layout
         lines.push(format!("set -g status-position {}", position));
-        lines.push("set -g status-interval 10".to_string());
+        lines.push("set -g status-interval 1".to_string());
         lines.push(format!("set -g status-style \"bg={},fg={}\"", bg, fg));
         lines.push("set -g status-left-length 40".to_string());
         lines.push("set -g status-right-length 60".to_string());
