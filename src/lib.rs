@@ -12,8 +12,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    sync::atomic::{AtomicBool, Ordering},
-    sync::Arc,
     thread,
     time::Duration,
 };
@@ -130,6 +128,10 @@ pub fn run() -> Result<()> {
             run_ls()?;
         }
 
+        Some(Commands::Watch { window, project, start_time }) => {
+            run_watcher(&window, &project, &start_time)?;
+        }
+
         Some(Commands::Daemon { action }) => {
             run_daemon(&project, &dir, action)?;
         }
@@ -210,7 +212,18 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
 
     let start_time = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
-    // 1. Instant window naming
+    // 1. Instant window naming and capture window id
+    let target_window = if in_tmux {
+        Command::new("tmux")
+            .args(["display-message", "-p", "#{window_id}"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+    } else {
+        None
+    };
+
     if in_tmux {
         if let Some(ref cid) = conv_id {
             let _ = Command::new("tmux")
@@ -239,54 +252,24 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
-    // 2. Background watcher thread for automatic title sync on new conversations
-    let stop_watcher = Arc::new(AtomicBool::new(false));
-    let stop_watcher_clone = Arc::clone(&stop_watcher);
-
+    // 2. Background detached watcher process for automatic title sync on new conversations
     if in_tmux && conv_id.is_none() {
-        let proj = project.to_string();
-        thread::spawn(move || {
-            let db_path = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".gemini/antigravity-cli/conversation_summaries.db");
-
-            for _ in 0..60 {
-                if stop_watcher_clone.load(Ordering::Relaxed) {
-                    break;
-                }
-                thread::sleep(Duration::from_secs(3));
-                if stop_watcher_clone.load(Ordering::Relaxed) {
-                    break;
-                }
-
-                if db_path.exists() {
-                    if let Ok(conn) = rusqlite::Connection::open(&db_path) {
-                        let sql = "
-                            SELECT conversation_id, title 
-                            FROM conversation_summaries 
-                            WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
-                              AND last_modified_time >= ?3
-                              AND title IS NOT NULL AND title != ''
-                            ORDER BY last_modified_time DESC 
-                            LIMIT 1;
-                        ";
-                        let pattern = format!("%{}%", proj);
-                        if let Ok(mut stmt) = conn.prepare(sql) {
-                            if let Ok((cid, title)) = stmt.query_row(
-                                rusqlite::params![pattern, proj, start_time],
-                                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-                            ) {
-                                let _ = Command::new("tmux")
-                                    .args(["set-option", "-w", "@conversation_id", &cid])
-                                    .status();
-                                let _ = tmux::TmuxDriver::rename_window(&sanitize_title(&title));
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
-        });
+        if let Some(ref win) = target_window {
+            let _ = Command::new("agymux")
+                .args([
+                    "watch",
+                    "--window",
+                    win,
+                    "--project",
+                    project,
+                    "--start-time",
+                    &start_time,
+                ])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+        }
     }
 
     // 3. Assemble and execute agy
@@ -317,6 +300,51 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         };
         std::process::exit(code);
     }
+}
+
+/// Detached background watcher that polls SQLite for a newly created conversation and renames the window
+fn run_watcher(target_window: &str, project: &str, start_time: &str) -> Result<()> {
+    let db_path = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".gemini/antigravity-cli/conversation_summaries.db");
+
+    let proj = project.to_string();
+    let pattern = format!("%{}%", proj);
+
+    for _ in 0..80 {
+        thread::sleep(Duration::from_secs(3));
+        if !db_path.exists() {
+            continue;
+        }
+
+        if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+            let sql = "
+                SELECT conversation_id, title 
+                FROM conversation_summaries 
+                WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
+                  AND last_modified_time >= ?3
+                  AND title IS NOT NULL AND title != ''
+                ORDER BY last_modified_time DESC 
+                LIMIT 1;
+            ";
+            if let Ok(mut stmt) = conn.prepare(sql) {
+                if let Ok((cid, title)) = stmt.query_row(
+                    rusqlite::params![pattern, proj, start_time],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+                ) {
+                    let _ = Command::new("tmux")
+                        .args(["set-option", "-w", "-t", target_window, "@conversation_id", &cid])
+                        .status();
+                    let clean = sanitize_title(&title);
+                    let _ = Command::new("tmux")
+                        .args(["rename-window", "-t", target_window, &clean])
+                        .status();
+                    break;
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Print formatted transcript preview to stdout

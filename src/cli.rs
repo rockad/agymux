@@ -82,6 +82,17 @@ pub enum Commands {
     /// List active agymux sessions
     Ls,
 
+    /// Internal background watcher for renaming windows
+    #[command(hide = true)]
+    Watch {
+        #[arg(long)]
+        window: String,
+        #[arg(long)]
+        project: String,
+        #[arg(long)]
+        start_time: String,
+    },
+
     /// Manage background systemd user daemon
     Daemon {
         #[command(subcommand)]
