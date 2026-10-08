@@ -113,14 +113,14 @@ impl TmuxProfile {
             lines.push("bind к refresh-client".to_string());
         }
 
-        // Direct tab switching Alt+1..9
+        // Direct tab switching (Prefix + 1..9)
         for i in 1..=9 {
-            lines.push(format!("bind -n M-{} select-window -t :{}", i, i));
+            lines.push(format!("bind {} select-window -t :{}", i, i));
         }
 
-        // Cycling Alt+Left / Alt+Right
-        lines.push("bind -n M-Left previous-window".to_string());
-        lines.push("bind -n M-Right next-window".to_string());
+        // Cycling (Prefix + Left / Right)
+        lines.push("bind Left previous-window".to_string());
+        lines.push("bind Right next-window".to_string());
 
         lines.join("\n") + "\n"
     }

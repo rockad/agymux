@@ -41,8 +41,8 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 | **Launch with Custom Flags** | `Ctrl+Space l` / `д` | `⚙️ Launch with Custom Flags` |
 | **Close Tab** | `Ctrl+Space x` / `ч` | `🧹 Close Tab` |
 | **Detach Session** | `Ctrl+Space d` / `в` | `🚪 Detach Session` |
-| **Direct Tab Jump** | `Alt+1` .. `Alt+9` | N/A |
-| **Cycle Adjacent Tabs** | `Alt+Left` / `Alt+Right` | N/A |
+| **Direct Tab Jump** | `Ctrl+Space 1` .. `9` | N/A |
+| **Cycle Adjacent Tabs** | `Ctrl+Space Left` / `Right` | N/A |
 
 ---
 

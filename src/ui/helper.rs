@@ -86,8 +86,8 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     text_lines.push(Line::from(vec![
         Span::styled("▌ TAB NAVIGATION & MOVEMENT", Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
     ]));
-    text_lines.push(shortcut_line("Alt + 1..9", "Jump directly to tab 1..9 (layout-independent)"));
-    text_lines.push(shortcut_line("Alt + Left / Right", "Cycle to previous / next tab"));
+    text_lines.push(shortcut_line("Ctrl+Space 1..9", "Jump directly to tab 1..9"));
+    text_lines.push(shortcut_line("Ctrl+Space Left / Right", "Cycle to previous / next tab"));
     text_lines.push(shortcut_line("Ctrl+Space s  /  ы", "Two-pane tab & conversation switcher"));
     text_lines.push(Line::raw(""));
 
