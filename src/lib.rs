@@ -20,9 +20,9 @@ pub fn run() -> Result<()> {
     let cli = Cli::parse();
     let config = Config::load().unwrap_or_default();
 
-    let dir = cli.dir.unwrap_or_else(|| {
-        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-    });
+    let dir = cli
+        .dir
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
     let project = cli
         .project
@@ -127,7 +127,12 @@ pub fn run() -> Result<()> {
             run_ls()?;
         }
 
-        Some(Commands::Watch { window, project, start_time, exclude_id }) => {
+        Some(Commands::Watch {
+            window,
+            project,
+            start_time,
+            exclude_id,
+        }) => {
             run_watcher(&window, &project, &start_time, exclude_id.as_deref())?;
         }
     }
@@ -172,7 +177,17 @@ fn handle_attach(
     Ok(())
 }
 
-fn sanitize_title(raw: &str) -> String {
+pub fn db_path() -> PathBuf {
+    if let Ok(custom) = std::env::var("AGYMUX_DB_PATH") {
+        PathBuf::from(custom)
+    } else {
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join(".gemini/antigravity-cli/conversation_summaries.db")
+    }
+}
+
+pub fn sanitize_title(raw: &str) -> String {
     let clean: String = raw
         .chars()
         .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '_' || *c == '-' || *c == '.')
@@ -205,7 +220,9 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
-    let start_time = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let start_time = chrono::Utc::now()
+        .format("%Y-%m-%d %H:%M:%S%.6f")
+        .to_string();
 
     // 1. Instant window naming and capture window id
     let target_window = if in_tmux {
@@ -225,11 +242,9 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
                 .args(["set-option", "-w", "@conversation_id", cid])
                 .status();
 
-            let db_path = dirs::home_dir()
-                .unwrap_or_default()
-                .join(".gemini/antigravity-cli/conversation_summaries.db");
-            if db_path.exists() {
-                if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+            let db = db_path();
+            if db.exists() {
+                if let Ok(conn) = rusqlite::Connection::open(&db) {
                     let stmt = conn
                         .prepare("SELECT title FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1")
                         .ok();
@@ -248,18 +263,23 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     }
 
     let latest_existing_id = {
-        let db_path = dirs::home_dir()
-            .unwrap_or_default()
-            .join(".gemini/antigravity-cli/conversation_summaries.db");
-        if db_path.exists() {
-            rusqlite::Connection::open(&db_path)
+        let db = db_path();
+        if db.exists() {
+            rusqlite::Connection::open(&db)
                 .ok()
                 .and_then(|conn| {
+                    let pattern = format!("%{}%", project);
                     conn.query_row(
-                        "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
-                        [],
+                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                        rusqlite::params![pattern, project],
                         |r| r.get::<_, String>(0),
-                    ).ok()
+                    ).or_else(|_| {
+                        conn.query_row(
+                            "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                            [],
+                            |r| r.get::<_, String>(0),
+                        )
+                    }).ok()
                 })
         } else {
             None
@@ -327,20 +347,18 @@ fn run_watcher(
     start_time: &str,
     exclude_id: Option<&str>,
 ) -> Result<()> {
-    let db_path = dirs::home_dir()
-        .unwrap_or_default()
-        .join(".gemini/antigravity-cli/conversation_summaries.db");
+    let db = db_path();
 
     let proj = project.to_string();
     let pattern = format!("%{}%", proj);
 
     for _ in 0..120 {
         thread::sleep(Duration::from_millis(500));
-        if !db_path.exists() {
+        if !db.exists() {
             continue;
         }
 
-        if let Ok(conn) = rusqlite::Connection::open(&db_path) {
+        if let Ok(conn) = rusqlite::Connection::open(&db) {
             let sql = "
                 SELECT conversation_id, title 
                 FROM conversation_summaries 
@@ -357,7 +375,14 @@ fn run_watcher(
                     |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
                 ) {
                     let _ = Command::new("tmux")
-                        .args(["set-option", "-w", "-t", target_window, "@conversation_id", &cid])
+                        .args([
+                            "set-option",
+                            "-w",
+                            "-t",
+                            target_window,
+                            "@conversation_id",
+                            &cid,
+                        ])
                         .status();
                     let clean = sanitize_title(&title);
                     let _ = Command::new("tmux")
@@ -376,7 +401,10 @@ fn run_preview(conv_id: &str) -> Result<()> {
     let summary = match core::transcript::TranscriptParser::parse(conv_id) {
         Ok(s) => s,
         Err(e) => {
-            println!("\x1b[1;31m[!] Transcript not found for conversation:\x1b[0m {} ({})", conv_id, e);
+            println!(
+                "\x1b[1;31m[!] Transcript not found for conversation:\x1b[0m {} ({})",
+                conv_id, e
+            );
             return Ok(());
         }
     };
@@ -390,9 +418,14 @@ fn run_preview(conv_id: &str) -> Result<()> {
         format_number_cli(summary.total_output_tokens),
         format_number_cli(total)
     );
-    println!("\x1b[1;33mTools:\x1b[0m  {} executed\n", summary.tools_used.len());
+    println!(
+        "\x1b[1;33mTools:\x1b[0m  {} executed\n",
+        summary.tools_used.len()
+    );
 
-    println!("\x1b[1;36m━━━ Initial User Prompt ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m");
+    println!(
+        "\x1b[1;36m━━━ Initial User Prompt ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m"
+    );
     if !summary.first_prompt.is_empty() {
         println!("{}", summary.first_prompt);
     } else {
@@ -400,7 +433,9 @@ fn run_preview(conv_id: &str) -> Result<()> {
     }
     println!();
 
-    println!("\x1b[1;36m━━━ Latest Assistant Turn ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m");
+    println!(
+        "\x1b[1;36m━━━ Latest Assistant Turn ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m"
+    );
     if !summary.last_response.is_empty() {
         println!("{}", summary.last_response);
     } else {
@@ -408,7 +443,9 @@ fn run_preview(conv_id: &str) -> Result<()> {
     }
     println!();
 
-    println!("\x1b[1;36m━━━ Executed Tools Breakdown ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m");
+    println!(
+        "\x1b[1;36m━━━ Executed Tools Breakdown ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m"
+    );
     if !summary.tools_used.is_empty() {
         for t in &summary.tools_used {
             println!("  \x1b[0;32m●\x1b[0m \x1b[1m{}\x1b[0m", t);
@@ -433,7 +470,11 @@ fn format_number_cli(num: u64) -> String {
 /// List active agymux sessions
 fn run_ls() -> Result<()> {
     let output = Command::new("tmux")
-        .args(["list-sessions", "-F", "#{session_name} (#{?session_attached,attached,detached})"])
+        .args([
+            "list-sessions",
+            "-F",
+            "#{session_name} (#{?session_attached,attached,detached})",
+        ])
         .output();
 
     let mut active = Vec::new();

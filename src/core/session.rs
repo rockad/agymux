@@ -31,7 +31,7 @@ pub fn format_relative_time(epoch_secs: i64) -> String {
         format!("{}m ago", diff / 60)
     } else if diff < 86400 {
         format!("{}h ago", diff / 3600)
-    } else if diff < 2592000 {
+    } else if diff <= 2592000 {
         format!("{}d ago", diff / 86400)
     } else if diff < 31536000 {
         format!("{}mo ago", diff / 2592000)
@@ -40,14 +40,45 @@ pub fn format_relative_time(epoch_secs: i64) -> String {
     }
 }
 
-/// Clean up titles by trimming and replacing line breaks
+/// URL decode a percent-encoded string
+fn url_decode(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut bytes = s.bytes();
+    while let Some(b) = bytes.next() {
+        if b == b'%' {
+            let h1 = bytes.next();
+            let h2 = bytes.next();
+            if let (Some(h1), Some(h2)) = (h1, h2) {
+                let hex_str = [h1, h2];
+                if let Ok(hex_str_utf8) = std::str::from_utf8(&hex_str) {
+                    if let Ok(val) = u8::from_str_radix(hex_str_utf8, 16) {
+                        result.push(val as char);
+                        continue;
+                    }
+                }
+                result.push('%');
+                result.push(h1 as char);
+                result.push(h2 as char);
+            } else {
+                result.push('%');
+                if let Some(h1) = h1 {
+                    result.push(h1 as char);
+                }
+            }
+        } else {
+            result.push(b as char);
+        }
+    }
+    result
+}
+
+/// Clean up titles by trimming, collapsing spaces, and replacing line breaks
 fn clean_title(title: &str) -> String {
-    let clean = title.replace('\n', " ").replace('\r', "");
-    let trimmed = clean.trim();
-    if trimmed.is_empty() {
+    let collapsed: Vec<&str> = title.split_whitespace().collect();
+    if collapsed.is_empty() {
         "Untitled".to_string()
     } else {
-        trimmed.to_string()
+        collapsed.join(" ")
     }
 }
 
@@ -64,8 +95,9 @@ fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
             for v in arr {
                 if let Some(uri_str) = v.as_str() {
                     let cleaned = uri_str.strip_prefix("file://").unwrap_or(uri_str);
-                    if !cleaned.is_empty() {
-                        return Some(cleaned.to_string());
+                    let decoded = url_decode(cleaned);
+                    if !decoded.is_empty() {
+                        return Some(decoded);
                     }
                 }
             }
@@ -73,8 +105,9 @@ fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
     }
 
     let cleaned = s.strip_prefix("file://").unwrap_or(s);
-    if !cleaned.is_empty() {
-        Some(cleaned.to_string())
+    let decoded = url_decode(cleaned);
+    if !decoded.is_empty() {
+        Some(decoded)
     } else {
         None
     }
@@ -401,5 +434,58 @@ mod tests {
             assert!(global.is_ok());
         }
     }
-}
 
+    #[test]
+    fn test_format_relative_time_boundaries() {
+        let now = chrono::Utc::now().timestamp();
+        assert_eq!(format_relative_time(now), "just now");
+        assert_eq!(format_relative_time(now - 45), "45s ago");
+        assert_eq!(format_relative_time(now - 59), "59s ago");
+        assert_eq!(format_relative_time(now - 60), "1m ago");
+        assert_eq!(format_relative_time(now - 3599), "59m ago");
+        assert_eq!(format_relative_time(now - 3600), "1h ago");
+        assert_eq!(format_relative_time(now - 82800), "23h ago");
+        assert_eq!(format_relative_time(now - 86400), "1d ago");
+        assert_eq!(format_relative_time(now - 2592000), "30d ago");
+        // Future timestamp edge case
+        assert_eq!(format_relative_time(now + 100), "just now");
+    }
+
+    #[test]
+    fn test_extract_project_path_variants() {
+        assert_eq!(extract_project_path(None), None);
+        assert_eq!(extract_project_path(Some("")), None);
+        assert_eq!(
+            extract_project_path(Some("[\"file:///home/user/code\"]")),
+            Some("/home/user/code".to_string())
+        );
+        assert_eq!(
+            extract_project_path(Some("file:///home/user/repo%20space")),
+            Some("/home/user/repo space".to_string())
+        );
+        assert_eq!(
+            extract_project_path(Some("/direct/path/to/project")),
+            Some("/direct/path/to/project".to_string())
+        );
+    }
+
+    #[test]
+    fn test_clean_title_variations() {
+        assert_eq!(clean_title("  normal title  "), "normal title");
+        assert_eq!(clean_title("multi   spaced   words"), "multi spaced words");
+        assert_eq!(clean_title(""), "Untitled");
+        assert_eq!(clean_title("   "), "Untitled");
+    }
+
+    #[test]
+    fn test_empty_db_no_tables() {
+        let conn = Connection::open_in_memory().unwrap();
+        let db = SessionDb::from_connection(conn);
+        let global = db.get_global_conversations().unwrap();
+        assert!(global.is_empty());
+        let local = db
+            .get_local_conversations(Path::new("/home/rockad/projects/agymux"))
+            .unwrap();
+        assert!(local.is_empty());
+    }
+}

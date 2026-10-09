@@ -124,12 +124,27 @@ impl PickerState {
                     open_convs.insert(cid.clone(), true);
                 }
                 let marker = if is_active { "▶ " } else { "  " };
-                let turn_icon = if window_name.contains('●') { "● " } else { "  " };
-                let label = match self.scope {
-                    ScopeArg::Local => format!("{}[Tab {}] {}{:<24} (open)", marker, window_index, turn_icon, window_name),
-                    ScopeArg::Global => format!("{}[{}:{}] {}{:<20} (open)", marker, session, window_index, turn_icon, window_name),
+                let turn_icon = if window_name.contains('●') {
+                    "● "
+                } else {
+                    "  "
                 };
-                let match_text = format!("{} {} {}", session, window_name, conversation_id.as_deref().unwrap_or(""));
+                let label = match self.scope {
+                    ScopeArg::Local => format!(
+                        "{}[Tab {}] {}{:<24} (open)",
+                        marker, window_index, turn_icon, window_name
+                    ),
+                    ScopeArg::Global => format!(
+                        "{}[{}:{}] {}{:<20} (open)",
+                        marker, session, window_index, turn_icon, window_name
+                    ),
+                };
+                let match_text = format!(
+                    "{} {} {}",
+                    session,
+                    window_name,
+                    conversation_id.as_deref().unwrap_or("")
+                );
                 candidates.push(PickerCandidate {
                     display_label: label,
                     match_text,
@@ -155,9 +170,14 @@ impl PickerState {
                 }
                 let label = match self.scope {
                     ScopeArg::Local => format!("   [Hist]       {:<30} ({})", title, relative_time),
-                    ScopeArg::Global => format!("   [{:<10}] {:<30} ({})", project, title, relative_time),
+                    ScopeArg::Global => {
+                        format!("   [{:<10}] {:<30} ({})", project, title, relative_time)
+                    }
                 };
-                let match_text = format!("{} {} {} {}", title, project, relative_time, conversation_id);
+                let match_text = format!(
+                    "{} {} {} {}",
+                    title, project, relative_time, conversation_id
+                );
                 candidates.push(PickerCandidate {
                     display_label: label,
                     match_text,
@@ -189,7 +209,7 @@ impl PickerState {
             }
 
             // Sort descending by match score
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            scored.sort_by_key(|a| std::cmp::Reverse(a.0));
             self.filtered_indices = scored.into_iter().map(|(_, idx)| idx).collect();
         }
 
@@ -226,7 +246,8 @@ impl PickerState {
         }
 
         let info = load_transcript(conv_id);
-        self.transcript_cache.insert(conv_id.to_string(), info.clone());
+        self.transcript_cache
+            .insert(conv_id.to_string(), info.clone());
         info
     }
 }
@@ -337,8 +358,14 @@ pub fn render(f: &mut Frame, area: Rect, state: &mut PickerState) {
     let prompt_label = format!("⚡ [{}] > ", scope_tag);
     let search_block = styled_block("Switcher", true);
     let search_p = Paragraph::new(Line::from(vec![
-        Span::styled(prompt_label, Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(&state.query, Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            prompt_label,
+            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            &state.query,
+            Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("█", Style::default().fg(COLOR_PINK)),
     ]))
     .block(search_block)
@@ -366,7 +393,9 @@ pub fn render(f: &mut Frame, area: Rect, state: &mut PickerState) {
                     Span::styled(
                         &candidate.display_label,
                         if is_selected {
-                            Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD)
+                            Style::default()
+                                .fg(COLOR_GREEN)
+                                .add_modifier(Modifier::BOLD)
                         } else {
                             Style::default().fg(COLOR_PURPLE)
                         },
@@ -375,7 +404,9 @@ pub fn render(f: &mut Frame, area: Rect, state: &mut PickerState) {
                 ItemKind::OpenTab { .. } => Line::from(vec![Span::styled(
                     &candidate.display_label,
                     if is_selected {
-                        Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(COLOR_GREEN)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(COLOR_FG)
                     },
@@ -383,7 +414,9 @@ pub fn render(f: &mut Frame, area: Rect, state: &mut PickerState) {
                 ItemKind::Historical { .. } => Line::from(vec![Span::styled(
                     &candidate.display_label,
                     if is_selected {
-                        Style::default().fg(COLOR_YELLOW).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(COLOR_YELLOW)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         muted_style()
                     },
@@ -424,14 +457,16 @@ pub fn render(f: &mut Frame, area: Rect, state: &mut PickerState) {
     if let Some(candidate) = selected_candidate {
         render_preview_content(f, preview_inner, &candidate, state);
     } else {
-        let empty_p = Paragraph::new(Line::from(vec![
-            Span::styled("No item selected.", muted_style()),
-        ]))
+        let empty_p = Paragraph::new(Line::from(vec![Span::styled(
+            "No item selected.",
+            muted_style(),
+        )]))
         .alignment(Alignment::Center);
         f.render_widget(empty_p, preview_inner);
     }
 }
 
+#[allow(clippy::vec_init_then_push)]
 fn render_preview_content(
     f: &mut Frame,
     area: Rect,
@@ -441,35 +476,45 @@ fn render_preview_content(
     match &candidate.kind {
         ItemKind::NewTab => {
             let mut lines = Vec::new();
-            lines.push(Line::from(vec![
-                Span::styled(
-                    "➕ Launch New Conversation",
-                    Style::default().fg(COLOR_PURPLE).add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "➕ Launch New Conversation",
+                Style::default()
+                    .fg(COLOR_PURPLE)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             lines.push(Line::raw(""));
             lines.push(meta_line("Project:", &state.project_name));
-            lines.push(meta_line("Working Dir:", &state.workdir.display().to_string()));
+            lines.push(meta_line(
+                "Working Dir:",
+                &state.workdir.display().to_string(),
+            ));
             lines.push(meta_line("Engine:", "Google Antigravity CLI (agy)"));
             lines.push(meta_line("Shortcut:", "Ctrl+Space c / с"));
             lines.push(Line::raw(""));
-            lines.push(Line::from(vec![
-                Span::styled("┌── BEHAVIOR ──────────────────────────────────────────┐", Style::default().fg(COLOR_MUTED)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("│  Spawns a fresh conversation in a new top tab.       │", Style::default().fg(COLOR_FG)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("│  Title names immediately from your initial prompt.   │", Style::default().fg(COLOR_FG)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("│  Running turn status displays live in status bar (●). │", Style::default().fg(COLOR_FG)),
-            ]));
-            lines.push(Line::from(vec![
-                Span::styled("└──────────────────────────────────────────────────────┘", Style::default().fg(COLOR_MUTED)),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                "┌── BEHAVIOR ──────────────────────────────────────────┐",
+                Style::default().fg(COLOR_MUTED),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "│  Spawns a fresh conversation in a new top tab.       │",
+                Style::default().fg(COLOR_FG),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "│  Title names immediately from your initial prompt.   │",
+                Style::default().fg(COLOR_FG),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "│  Running turn status displays live in status bar (●). │",
+                Style::default().fg(COLOR_FG),
+            )]));
+            lines.push(Line::from(vec![Span::styled(
+                "└──────────────────────────────────────────────────────┘",
+                Style::default().fg(COLOR_MUTED),
+            )]));
 
-            let p = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
+            let p = Paragraph::new(lines)
+                .style(base_style())
+                .wrap(Wrap { trim: false });
             f.render_widget(p, area);
         }
 
@@ -482,12 +527,12 @@ fn render_preview_content(
             ..
         } => {
             let mut lines = Vec::new();
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("🗂️  Tab #{} {}", window_index, window_name),
-                    Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!("🗂️  Tab #{} {}", window_index, window_name),
+                Style::default()
+                    .fg(COLOR_GREEN)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             lines.push(Line::raw(""));
             lines.push(meta_line("Session:", session));
             lines.push(meta_line("Window Index:", &window_index.to_string()));
@@ -498,10 +543,15 @@ fn render_preview_content(
                 let t_info = state.get_or_load_transcript(cid);
                 append_transcript_lines(&mut lines, &t_info, cid);
             } else {
-                lines.push(meta_line("Status:", "Active Tab (no bound conversation ID)"));
+                lines.push(meta_line(
+                    "Status:",
+                    "Active Tab (no bound conversation ID)",
+                ));
             }
 
-            let p = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
+            let p = Paragraph::new(lines)
+                .style(base_style())
+                .wrap(Wrap { trim: false });
             f.render_widget(p, area);
         }
 
@@ -513,12 +563,12 @@ fn render_preview_content(
             step_count,
         } => {
             let mut lines = Vec::new();
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("💬 {}", title),
-                    Style::default().fg(COLOR_PURPLE).add_modifier(Modifier::BOLD),
-                ),
-            ]));
+            lines.push(Line::from(vec![Span::styled(
+                format!("💬 {}", title),
+                Style::default()
+                    .fg(COLOR_PURPLE)
+                    .add_modifier(Modifier::BOLD),
+            )]));
             lines.push(Line::raw(""));
             lines.push(meta_line("Conversation ID:", conversation_id));
             lines.push(meta_line("Project:", project));
@@ -528,7 +578,9 @@ fn render_preview_content(
             let t_info = state.get_or_load_transcript(conversation_id);
             append_transcript_lines(&mut lines, &t_info, conversation_id);
 
-            let p = Paragraph::new(lines).style(base_style()).wrap(Wrap { trim: false });
+            let p = Paragraph::new(lines)
+                .style(base_style())
+                .wrap(Wrap { trim: false });
             f.render_widget(p, area);
         }
     }
@@ -538,22 +590,44 @@ fn append_transcript_lines(lines: &mut Vec<Line<'static>>, info: &TranscriptInfo
     lines.push(Line::raw(""));
     let total_tokens = info.input_tokens + info.output_tokens + info.cache_tokens;
     lines.push(Line::from(vec![
-        Span::styled("Tokens: ", Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("Input: {} ", format_number(info.input_tokens)), Style::default().fg(COLOR_GREEN)),
-        Span::styled(format!("| Output: {} ", format_number(info.output_tokens)), Style::default().fg(COLOR_GREEN)),
-        Span::styled(format!("| Cache: {} ", format_number(info.cache_tokens)), Style::default().fg(COLOR_GREEN)),
-        Span::styled(format!("(Total: {})", format_number(total_tokens)), Style::default().fg(COLOR_YELLOW)),
+        Span::styled(
+            "Tokens: ",
+            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("Input: {} ", format_number(info.input_tokens)),
+            Style::default().fg(COLOR_GREEN),
+        ),
+        Span::styled(
+            format!("| Output: {} ", format_number(info.output_tokens)),
+            Style::default().fg(COLOR_GREEN),
+        ),
+        Span::styled(
+            format!("| Cache: {} ", format_number(info.cache_tokens)),
+            Style::default().fg(COLOR_GREEN),
+        ),
+        Span::styled(
+            format!("(Total: {})", format_number(total_tokens)),
+            Style::default().fg(COLOR_YELLOW),
+        ),
     ]));
     lines.push(Line::from(vec![
-        Span::styled("Tools: ", Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(format!("{} executed", info.tools_count), Style::default().fg(COLOR_FG)),
+        Span::styled(
+            "Tools: ",
+            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!("{} executed", info.tools_count),
+            Style::default().fg(COLOR_FG),
+        ),
     ]));
     lines.push(Line::raw(""));
 
     // Initial Prompt block
-    lines.push(Line::from(vec![
-        Span::styled("━━━ Initial User Prompt ━━━━━━━━━━━━━━━━━━━━━━━━━", Style::default().fg(COLOR_CYAN)),
-    ]));
+    lines.push(Line::from(vec![Span::styled(
+        "━━━ Initial User Prompt ━━━━━━━━━━━━━━━━━━━━━━━━━",
+        Style::default().fg(COLOR_CYAN),
+    )]));
     if let Some(ref prompt) = info.initial_prompt {
         let clean = prompt.replace('\n', " ");
         let truncated = if clean.len() > 300 {
@@ -561,19 +635,26 @@ fn append_transcript_lines(lines: &mut Vec<Line<'static>>, info: &TranscriptInfo
         } else {
             clean
         };
-        lines.push(Line::from(vec![Span::styled(truncated, Style::default().fg(COLOR_FG))]));
+        lines.push(Line::from(vec![Span::styled(
+            truncated,
+            Style::default().fg(COLOR_FG),
+        )]));
     } else {
-        lines.push(Line::from(vec![Span::styled("(No initial prompt recorded)", muted_style())]));
+        lines.push(Line::from(vec![Span::styled(
+            "(No initial prompt recorded)",
+            muted_style(),
+        )]));
     }
     lines.push(Line::raw(""));
 
     // Latest Turn block
-    lines.push(Line::from(vec![
-        Span::styled(
-            format!("━━━ Latest Assistant Turn [{}] ━━━━━━━━━━━━━", info.latest_type.as_deref().unwrap_or("RESPONSE")),
-            Style::default().fg(COLOR_CYAN),
+    lines.push(Line::from(vec![Span::styled(
+        format!(
+            "━━━ Latest Assistant Turn [{}] ━━━━━━━━━━━━━",
+            info.latest_type.as_deref().unwrap_or("RESPONSE")
         ),
-    ]));
+        Style::default().fg(COLOR_CYAN),
+    )]));
     if let Some(ref turn) = info.latest_turn {
         let clean = turn.replace('\n', " ");
         let truncated = if clean.len() > 400 {
@@ -581,23 +662,33 @@ fn append_transcript_lines(lines: &mut Vec<Line<'static>>, info: &TranscriptInfo
         } else {
             clean
         };
-        lines.push(Line::from(vec![Span::styled(truncated, Style::default().fg(COLOR_FG))]));
+        lines.push(Line::from(vec![Span::styled(
+            truncated,
+            Style::default().fg(COLOR_FG),
+        )]));
     } else {
-        lines.push(Line::from(vec![Span::styled("(No assistant response yet)", muted_style())]));
+        lines.push(Line::from(vec![Span::styled(
+            "(No assistant response yet)",
+            muted_style(),
+        )]));
     }
     lines.push(Line::raw(""));
 
     // Executed Tools Breakdown
     if !info.tools_breakdown.is_empty() {
-        lines.push(Line::from(vec![
-            Span::styled("━━━ Executed Tools Breakdown ━━━━━━━━━━━━━━━━━━━━", Style::default().fg(COLOR_CYAN)),
-        ]));
+        lines.push(Line::from(vec![Span::styled(
+            "━━━ Executed Tools Breakdown ━━━━━━━━━━━━━━━━━━━━",
+            Style::default().fg(COLOR_CYAN),
+        )]));
         let mut sorted_tools: Vec<(&String, &u64)> = info.tools_breakdown.iter().collect();
         sorted_tools.sort_by(|a, b| b.1.cmp(a.1));
         for (name, count) in sorted_tools.into_iter().take(8) {
             lines.push(Line::from(vec![
                 Span::styled("  ● ", Style::default().fg(COLOR_GREEN)),
-                Span::styled(format!("{:<20}", name), Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    format!("{:<20}", name),
+                    Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(format!(": {}", count), Style::default().fg(COLOR_YELLOW)),
             ]));
         }
@@ -772,8 +863,12 @@ fn load_transcript(conv_id: &str) -> TranscriptInfo {
         .unwrap_or_default()
         .join(".gemini/antigravity-cli/brain");
 
-    let p1 = brain_dir.join(conv_id).join(".system_generated/logs/transcript.jsonl");
-    let p2 = brain_dir.join(conv_id).join(".system_generated/logs/transcript_full.jsonl");
+    let p1 = brain_dir
+        .join(conv_id)
+        .join(".system_generated/logs/transcript.jsonl");
+    let p2 = brain_dir
+        .join(conv_id)
+        .join(".system_generated/logs/transcript_full.jsonl");
 
     let path = if p1.exists() {
         p1
@@ -785,13 +880,15 @@ fn load_transcript(conv_id: &str) -> TranscriptInfo {
 
     if let Ok(file) = File::open(path) {
         let reader = BufReader::new(file);
-        for line in reader.lines().flatten() {
+        for line in reader.lines().map_while(Result::ok) {
             if let Ok(v) = serde_json::from_str::<Value>(&line) {
                 let item_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
                 let source = v.get("source").and_then(|s| s.as_str()).unwrap_or("");
 
                 // Initial prompt
-                if info.initial_prompt.is_none() && (item_type == "USER_INPUT" || source == "USER_EXPLICIT") {
+                if info.initial_prompt.is_none()
+                    && (item_type == "USER_INPUT" || source == "USER_EXPLICIT")
+                {
                     if let Some(content) = v.get("content").and_then(|c| c.as_str()) {
                         let cleaned = clean_prompt(content);
                         if !cleaned.is_empty() {
@@ -875,9 +972,7 @@ pub fn execute_selection(
                     ])
                     .status();
             } else {
-                let _ = Command::new("agy")
-                    .args(["--project", project])
-                    .status();
+                let _ = Command::new("agy").args(["--project", project]).status();
             }
         }
         ItemKind::OpenTab {
@@ -887,10 +982,18 @@ pub fn execute_selection(
         } => {
             if std::env::var("TMUX").is_ok() {
                 let _ = Command::new("tmux")
-                    .args(["switch-client", "-t", &format!("{}:{}", session, window_index)])
+                    .args([
+                        "switch-client",
+                        "-t",
+                        &format!("{}:{}", session, window_index),
+                    ])
                     .status();
                 let _ = Command::new("tmux")
-                    .args(["select-window", "-t", &format!("{}:{}", session, window_index)])
+                    .args([
+                        "select-window",
+                        "-t",
+                        &format!("{}:{}", session, window_index),
+                    ])
                     .status();
             }
         }

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     #[serde(default)]
     pub general: GeneralConfig,
@@ -43,7 +43,7 @@ pub struct KeybindingsConfig {
     pub bilingual_cyrillic: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TmuxConfig {
     #[serde(default)]
     pub isolated_socket: bool,
@@ -96,25 +96,6 @@ impl Default for KeybindingsConfig {
         Self {
             prefix: default_prefix(),
             bilingual_cyrillic: default_true(),
-        }
-    }
-}
-
-impl Default for TmuxConfig {
-    fn default() -> Self {
-        Self {
-            isolated_socket: false,
-        }
-    }
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            general: GeneralConfig::default(),
-            theme: ThemeConfig::default(),
-            keybindings: KeybindingsConfig::default(),
-            tmux: TmuxConfig::default(),
         }
     }
 }
@@ -173,5 +154,106 @@ impl Config {
     /// Get resolved projects directory PathBuf
     pub fn resolved_projects_dir(&self) -> PathBuf {
         Self::expand_path(&self.general.projects_dir)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_default_config_values() {
+        let config = Config::default();
+        assert_eq!(config.general.projects_dir, "~/projects");
+        assert_eq!(config.general.default_model, "Gemini 3.6 Flash (Medium)");
+        assert_eq!(config.general.default_effort, "medium");
+        assert_eq!(config.theme.preset, "monokai-pro-octagon");
+        assert!(config.theme.rounded_pills);
+        assert_eq!(config.theme.status_position, "top");
+        assert_eq!(config.keybindings.prefix, "C-Space");
+        assert!(config.keybindings.bilingual_cyrillic);
+        assert!(!config.tmux.isolated_socket);
+    }
+
+    #[test]
+    fn test_config_deserialize_custom_toml() {
+        let toml_str = r#"
+[general]
+projects_dir = "/custom/projects"
+default_model = "Claude 3.7 Sonnet"
+default_effort = "high"
+
+[theme]
+preset = "catppuccin-mocha"
+rounded_pills = false
+status_position = "bottom"
+
+[keybindings]
+prefix = "C-a"
+bilingual_cyrillic = false
+
+[tmux]
+isolated_socket = true
+"#;
+        let config: Config = toml::from_str(toml_str).expect("custom toml parses");
+        assert_eq!(config.general.projects_dir, "/custom/projects");
+        assert_eq!(config.general.default_model, "Claude 3.7 Sonnet");
+        assert_eq!(config.general.default_effort, "high");
+        assert_eq!(config.theme.preset, "catppuccin-mocha");
+        assert!(!config.theme.rounded_pills);
+        assert_eq!(config.theme.status_position, "bottom");
+        assert_eq!(config.keybindings.prefix, "C-a");
+        assert!(!config.keybindings.bilingual_cyrillic);
+        assert!(config.tmux.isolated_socket);
+    }
+
+    #[test]
+    fn test_config_partial_toml_fallbacks() {
+        let toml_str = r#"
+[general]
+default_effort = "low"
+"#;
+        let config: Config = toml::from_str(toml_str).expect("partial toml parses");
+        assert_eq!(config.general.default_effort, "low");
+        assert_eq!(config.general.projects_dir, "~/projects");
+        assert_eq!(config.theme.preset, "monokai-pro-octagon");
+        assert_eq!(config.keybindings.prefix, "C-Space");
+    }
+
+    #[test]
+    fn test_config_expand_path() {
+        let expanded = Config::expand_path("~/work");
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(expanded, home.join("work"));
+        }
+
+        let non_tilde = Config::expand_path("/var/log");
+        assert_eq!(non_tilde, PathBuf::from("/var/log"));
+    }
+
+    #[test]
+    fn test_config_invalid_toml_fails() {
+        let bad_toml = "general = [unclosed array";
+        assert!(toml::from_str::<Config>(bad_toml).is_err());
+    }
+
+    #[test]
+    fn test_config_save_default_if_missing() {
+        let dir = tempdir().unwrap();
+        let target_file = dir.path().join("sub").join("config.toml");
+        assert!(!target_file.exists());
+
+        // Test creating parent directory and serializing default
+        if let Some(parent) = target_file.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        let default_cfg = Config::default();
+        let toml_str = toml::to_string_pretty(&default_cfg).unwrap();
+        fs::write(&target_file, toml_str).unwrap();
+
+        assert!(target_file.exists());
+        let reloaded: Config = toml::from_str(&fs::read_to_string(&target_file).unwrap()).unwrap();
+        assert_eq!(reloaded.general.projects_dir, "~/projects");
     }
 }

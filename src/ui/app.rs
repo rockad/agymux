@@ -7,8 +7,7 @@ use crossterm::{
 };
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::{
-    io,
-    panic,
+    io, panic,
     path::{Path, PathBuf},
     time::Duration,
 };

@@ -137,8 +137,7 @@ impl PaletteState {
                 if q.is_empty() {
                     return true;
                 }
-                item.title.to_lowercase().contains(&q)
-                    || item.shortcut.to_lowercase().contains(&q)
+                item.title.to_lowercase().contains(&q) || item.shortcut.to_lowercase().contains(&q)
             })
             .map(|(idx, _)| idx)
             .collect();
@@ -188,11 +187,19 @@ pub fn handle_key(key: KeyEvent, state: &mut PaletteState) -> PaletteResult {
                 PaletteResult::Cancel
             }
         }
-        KeyCode::Up | KeyCode::Char('k') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+        KeyCode::Up | KeyCode::Char('k')
+            if key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
             state.select_prev();
             PaletteResult::Continue
         }
-        KeyCode::Down | KeyCode::Char('j') if key.modifiers.contains(crossterm::event::KeyModifiers::CONTROL) => {
+        KeyCode::Down | KeyCode::Char('j')
+            if key
+                .modifiers
+                .contains(crossterm::event::KeyModifiers::CONTROL) =>
+        {
             state.select_next();
             PaletteResult::Continue
         }
@@ -246,8 +253,14 @@ pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
     // 1. Search Box
     let search_block = styled_block("Command Palette", true);
     let search_p = Paragraph::new(Line::from(vec![
-        Span::styled("⚡ Action > ", Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(&state.query, Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "⚡ Action > ",
+            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            &state.query,
+            Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("█", Style::default().fg(COLOR_PINK)),
     ]))
     .block(search_block)
@@ -268,7 +281,9 @@ pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
                 Span::styled(
                     format!("{:<26}", item.title),
                     if is_selected {
-                        Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(COLOR_GREEN)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default().fg(COLOR_FG)
                     },
@@ -322,7 +337,12 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
         }
         PaletteAction::NewTab => {
             let _ = Command::new("tmux")
-                .args(["new-window", "-n", "+ new", &format!("agymux run --project '{}'", proj)])
+                .args([
+                    "new-window",
+                    "-n",
+                    "+ new",
+                    &format!("agymux run --project '{}'", proj),
+                ])
                 .status();
         }
         PaletteAction::ForkConversation => {
@@ -333,7 +353,10 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                         "new-window",
                         "-n",
                         "[fork]",
-                        &format!("agymux run --project '{}' --conversation '{}'", proj, conv_id),
+                        &format!(
+                            "agymux run --project '{}' --conversation '{}'",
+                            proj, conv_id
+                        ),
                     ])
                     .status();
             } else {
@@ -363,28 +386,60 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                     "command-prompt",
                     "-p",
                     "Flags (e.g. --model 'Gemini Pro' --effort high): ",
-                    &format!("new-window -n 'agy [custom]' 'agymux run --project \"{}\" %%'", proj),
+                    &format!(
+                        "new-window -n 'agy [custom]' 'agymux run --project \"{}\" %%'",
+                        proj
+                    ),
                 ])
                 .status();
         }
         PaletteAction::CloseTab => {
             let _ = Command::new("tmux")
-                .args(["confirm-before", "-p", "kill-window #W? (y/n)", "kill-window"])
+                .args([
+                    "confirm-before",
+                    "-p",
+                    "kill-window #W? (y/n)",
+                    "kill-window",
+                ])
                 .status();
         }
         PaletteAction::SwitchTab => {
             let _ = Command::new("tmux")
-                .args(["display-popup", "-E", "-w", "85%", "-h", "80%", "agymux switch"])
+                .args([
+                    "display-popup",
+                    "-E",
+                    "-w",
+                    "85%",
+                    "-h",
+                    "80%",
+                    "agymux switch",
+                ])
                 .status();
         }
         PaletteAction::SwitchProject => {
             let _ = Command::new("tmux")
-                .args(["display-popup", "-E", "-w", "70%", "-h", "70%", "agymux project"])
+                .args([
+                    "display-popup",
+                    "-E",
+                    "-w",
+                    "70%",
+                    "-h",
+                    "70%",
+                    "agymux project",
+                ])
                 .status();
         }
         PaletteAction::Shortcuts => {
             let _ = Command::new("tmux")
-                .args(["display-popup", "-E", "-w", "65%", "-h", "70%", "agymux helper"])
+                .args([
+                    "display-popup",
+                    "-E",
+                    "-w",
+                    "65%",
+                    "-h",
+                    "70%",
+                    "agymux helper",
+                ])
                 .status();
         }
         PaletteAction::Detach => {

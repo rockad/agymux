@@ -219,5 +219,40 @@ mod tests {
             assert!(!summary.first_prompt.is_empty());
         }
     }
-}
 
+    #[test]
+    fn test_parse_reader_malformed_and_empty_lines() {
+        let data = r#"
+malformed json string
+{"invalid": json missing quote}
+
+{"step_index":0,"source":"USER_EXPLICIT","type":"USER_INPUT","content":"Hello world"}
+{"step_index":1,"source":"MODEL","type":"PLANNER_RESPONSE","thinking":"Thinking deeply...","tool_calls":[{"name":"ls"}]}
+"#;
+        let cursor = Cursor::new(data);
+        let summary =
+            TranscriptParser::parse_reader(cursor).expect("malformed lines should not abort");
+        assert_eq!(summary.first_prompt, "Hello world");
+        assert_eq!(summary.last_response, "Thinking deeply...");
+        assert_eq!(summary.tools_used, vec!["ls"]);
+        assert_eq!(summary.total_input_tokens, 0);
+        assert_eq!(summary.total_output_tokens, 0);
+    }
+
+    #[test]
+    fn test_parse_reader_duplicate_tools_and_empty() {
+        let data = r#"
+{"step_index":0,"source":"MODEL","type":"PLANNER_RESPONSE","tool_calls":[{"name":"tool_a"},{"name":"tool_a"},{"name":"tool_b"}]}
+"#;
+        let cursor = Cursor::new(data);
+        let summary = TranscriptParser::parse_reader(cursor).expect("parse should succeed");
+        assert_eq!(summary.tools_used, vec!["tool_a", "tool_b"]);
+
+        let empty_cursor = Cursor::new("");
+        let empty_summary =
+            TranscriptParser::parse_reader(empty_cursor).expect("empty reader succeeds");
+        assert!(empty_summary.first_prompt.is_empty());
+        assert!(empty_summary.last_response.is_empty());
+        assert!(empty_summary.tools_used.is_empty());
+    }
+}

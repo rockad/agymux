@@ -172,11 +172,40 @@ mod tests {
         map.insert("agy-myproject".to_string(), 3);
         map.insert("other".to_string(), 1);
 
-        assert_eq!(
-            ProjectScanner::resolve_active_windows("myproject", &map),
-            3
-        );
+        assert_eq!(ProjectScanner::resolve_active_windows("myproject", &map), 3);
         assert_eq!(ProjectScanner::resolve_active_windows("other", &map), 1);
         assert_eq!(ProjectScanner::resolve_active_windows("unknown", &map), 0);
+    }
+
+    #[test]
+    fn test_scan_projects_worktree_file() {
+        let temp_dir = std::env::temp_dir().join(format!(
+            "agymux_test_worktree_{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&temp_dir).unwrap();
+
+        let wt_dir = temp_dir.join("my-worktree");
+        fs::create_dir_all(&wt_dir).unwrap();
+        // .git as a file pointing to gitdir
+        fs::write(
+            wt_dir.join(".git"),
+            "gitdir: /path/to/main/.git/worktrees/wt",
+        )
+        .unwrap();
+
+        let scanned = ProjectScanner::scan_projects(&temp_dir).expect("scan succeeds");
+        assert_eq!(scanned.len(), 1);
+        assert_eq!(scanned[0].name, "my-worktree");
+
+        let non_existent = temp_dir.join("does_not_exist");
+        let empty =
+            ProjectScanner::scan_projects(&non_existent).expect("non-existent dir returns empty");
+        assert!(empty.is_empty());
+
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }

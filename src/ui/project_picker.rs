@@ -65,7 +65,7 @@ impl ProjectPickerState {
                 }
             }
 
-            scored.sort_by(|a, b| b.0.cmp(&a.0));
+            scored.sort_by_key(|a| std::cmp::Reverse(a.0));
             self.filtered_indices = scored.into_iter().map(|(_, idx)| idx).collect();
         }
 
@@ -171,8 +171,14 @@ pub fn render(f: &mut Frame, area: Rect, state: &ProjectPickerState) {
     // 1. Search Bar
     let search_block = styled_block("Global Project Switcher", true);
     let search_p = Paragraph::new(Line::from(vec![
-        Span::styled("🌐 Switch Project > ", Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD)),
-        Span::styled(&state.query, Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD)),
+        Span::styled(
+            "🌐 Switch Project > ",
+            Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            &state.query,
+            Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD),
+        ),
         Span::styled("█", Style::default().fg(COLOR_PINK)),
     ]))
     .block(search_block)
@@ -191,14 +197,18 @@ pub fn render(f: &mut Frame, area: Rect, state: &ProjectPickerState) {
             let status_badge = if p.is_active {
                 Span::styled(
                     format!("● active ({} tabs)", p.tab_count),
-                    Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(COLOR_GREEN)
+                        .add_modifier(Modifier::BOLD),
                 )
             } else {
                 Span::styled("○ inactive", muted_style())
             };
 
             let name_style = if is_selected {
-                Style::default().fg(COLOR_GREEN).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(COLOR_GREEN)
+                    .add_modifier(Modifier::BOLD)
             } else {
                 Style::default().fg(COLOR_FG).add_modifier(Modifier::BOLD)
             };
@@ -229,7 +239,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &ProjectPickerState) {
 
     // 3. Footer
     let footer_p = Paragraph::new(Line::from(vec![
-        Span::styled(" Enter: switch to project  ", Style::default().fg(COLOR_GREEN)),
+        Span::styled(
+            " Enter: switch to project  ",
+            Style::default().fg(COLOR_GREEN),
+        ),
         Span::styled(" Esc: cancel  ", Style::default().fg(COLOR_PINK)),
         Span::styled(" ↑/↓: navigate ", muted_style()),
     ]))
@@ -244,7 +257,11 @@ fn discover_projects(base_dir: &Path) -> Vec<ProjectItem> {
 
     // Query tmux active sessions starting with agy-
     if let Ok(output) = Command::new("tmux")
-        .args(["list-sessions", "-F", "#{session_name}\t#{session_windows}\t#{session_attached}"])
+        .args([
+            "list-sessions",
+            "-F",
+            "#{session_name}\t#{session_windows}\t#{session_attached}",
+        ])
         .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -315,11 +332,9 @@ fn discover_projects(base_dir: &Path) -> Vec<ProjectItem> {
     }
 
     // Sort: active projects first, then alphabetically by name
-    projects.sort_by(|a, b| {
-        match b.is_active.cmp(&a.is_active) {
-            std::cmp::Ordering::Equal => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
-            other => other,
-        }
+    projects.sort_by(|a, b| match b.is_active.cmp(&a.is_active) {
+        std::cmp::Ordering::Equal => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        other => other,
     });
 
     projects
