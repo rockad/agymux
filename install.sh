@@ -10,14 +10,24 @@ TMUX_CONF="${TMUX_CONF_DIR}/tmux.conf"
 
 echo "==> Installing agymux from ${REPO_DIR}..."
 
-# 1. Install single entrypoint binary into ~/.local/bin
+# 1. Install binaries into ~/.local/bin
 mkdir -p "$BIN_DIR"
 # Clean up any legacy secondary symlinks
 for legacy in agymux-tab-picker agymux-tab-runner agymux-palette agymux-project-picker agymux-helper agymux-preview; do
     rm -f "${BIN_DIR}/$legacy"
 done
-echo "  -> Linking single entrypoint agymux to $BIN_DIR/agymux"
-ln -sf "${REPO_DIR}/bin/agymux" "${BIN_DIR}/agymux"
+
+if command -v cargo >/dev/null 2>&1; then
+    echo "  -> Building release binaries with cargo"
+    (cd "${REPO_DIR}" && cargo build --release)
+elif [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
+    echo "  -> Building release binaries with ~/.cargo/bin/cargo"
+    (cd "${REPO_DIR}" && "${HOME}/.cargo/bin/cargo" build --release)
+fi
+
+echo "  -> Linking agymux and ax to $BIN_DIR"
+ln -sf "${REPO_DIR}/target/release/agymux" "${BIN_DIR}/agymux"
+ln -sf "${REPO_DIR}/target/release/ax" "${BIN_DIR}/ax"
 
 # 2. Wire tmux configuration
 mkdir -p "$TMUX_CONF_DIR"
