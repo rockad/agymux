@@ -196,6 +196,8 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         name: &str,
         dir: &Path,
         config: &crate::config::Config,
+        command: Option<&str>,
+        window_name: Option<&str>,
     ) -> Result<()> {
         if self.session_exists(name) {
             return Ok(());
@@ -203,17 +205,14 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
 
         let conf_path = crate::tmux::TmuxProfile::generate(config, name)?;
         let dir_str = dir.to_string_lossy();
+        let win = window_name.unwrap_or("+ new");
 
-        self.runner.run(&[
-            "new-session",
-            "-d",
-            "-s",
-            name,
-            "-c",
-            &dir_str,
-            "-n",
-            "main",
-        ])?;
+        let mut cmd_args = vec!["new-session", "-d", "-s", name, "-c", &dir_str, "-n", win];
+        if let Some(cmd) = command {
+            cmd_args.push(cmd);
+        }
+
+        self.runner.run(&cmd_args)?;
         let _ = self
             .runner
             .run(&["source-file", &conf_path.to_string_lossy()]);

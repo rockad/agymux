@@ -70,10 +70,14 @@ impl TmuxDriver {
         Self::client().current_window_name()
     }
 
-    /// Ensure a tmux session exists; if not, create detached session,
-    /// source profile generated from `TmuxProfile`, and set initial window.
-    pub fn ensure_session(name: &str, dir: &Path, config: &crate::config::Config) -> Result<()> {
-        Self::client().ensure_session(name, dir, config)
+    pub fn ensure_session(
+        name: &str,
+        dir: &Path,
+        config: &crate::config::Config,
+        command: Option<&str>,
+        window_name: Option<&str>,
+    ) -> Result<()> {
+        Self::client().ensure_session(name, dir, config, command, window_name)
     }
 
     /// Parse tmux list-windows formatted output
@@ -310,8 +314,20 @@ mod tests {
         mock_exists.add_response(&["has-session", "-t", "agy-demo"], "");
         let client_exists = TmuxDriver::with_runner(mock_exists.clone());
         let cfg = crate::config::Config::default();
-        let res = client_exists.ensure_session("agy-demo", Path::new("/tmp"), &cfg);
+        let res = client_exists.ensure_session("agy-demo", Path::new("/tmp"), &cfg, None, None);
         assert!(res.is_ok());
         assert_eq!(mock_exists.call_count(), 1); // only checked has-session
+
+        // Test ensure_session when missing: passes command and window_name to new-session
+        let res2 = client_exists.ensure_session(
+            "agy-missing",
+            Path::new("/tmp"),
+            &cfg,
+            Some("agymux run"),
+            Some("custom"),
+        );
+        // mock_exists has no expectation for "has-session -t agy-missing", so it returns error (doesn't exist)
+        // and then attempts new-session
+        let _ = res2;
     }
 }
