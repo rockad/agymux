@@ -60,6 +60,11 @@ impl TmuxDriver {
         Self::client().attach_session(name)
     }
 
+    /// Switch current client to target session
+    pub fn switch_client(name: &str) -> Result<()> {
+        Self::client().switch_client(name)
+    }
+
     /// Get current session name if inside tmux
     pub fn current_session() -> Option<String> {
         Self::client().current_session()
@@ -255,6 +260,20 @@ mod tests {
         assert!(client.kill_window(None).is_ok());
         assert_eq!(client.current_session(), Some("agy-test".to_string()));
         assert_eq!(client.current_window_name(), Some("main".to_string()));
+    }
+
+    #[test]
+    fn test_mock_driver_attach_and_switch_client() {
+        let mock = MockTmuxRunner::new();
+        mock.add_response(&["switch-client", "-t", "agy-other"], "");
+        let client = TmuxDriver::with_runner(mock.clone());
+
+        assert!(client.attach_session("agy-test").is_ok());
+        assert!(client.switch_client("agy-other").is_ok());
+        assert_eq!(
+            mock.last_call(),
+            Some(vec!["switch-client".into(), "-t".into(), "agy-other".into()])
+        );
     }
 
     #[test]

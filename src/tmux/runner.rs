@@ -8,6 +8,7 @@ use crate::tmux::driver::TmuxWindow;
 /// Trait abstracting execution of tmux commands
 pub trait TmuxCommandRunner: Send + Sync {
     fn run(&self, args: &[&str]) -> Result<String>;
+    fn attach_interactive(&self, args: &[&str]) -> Result<()>;
 }
 
 /// Production runner executing real tmux commands
@@ -22,6 +23,31 @@ impl TmuxCommandRunner for SystemTmuxRunner {
         } else {
             let stderr = String::from_utf8_lossy(&output.stderr);
             bail!("tmux command failed: {}", stderr.trim());
+        }
+    }
+
+    fn attach_interactive(&self, args: &[&str]) -> Result<()> {
+        let mut cmd = std::process::Command::new("tmux");
+        cmd.args(args);
+        cmd.stdin(std::process::Stdio::inherit());
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let err = cmd.exec();
+            bail!("failed to exec tmux attach: {}", err);
+        }
+
+        #[cfg(not(unix))]
+        {
+            let status = cmd.status()?;
+            if status.success() {
+                Ok(())
+            } else {
+                bail!("tmux exited with status: {:?}", status.code());
+            }
         }
     }
 }
@@ -97,6 +123,22 @@ impl TmuxCommandRunner for MockTmuxRunner {
             Some(MockResponse::Error(e)) => bail!("{}", e),
             Some(MockResponse::Closure(f)) => f(&key),
             None => bail!("MockTmuxRunner: unexpected call: {:?}", args),
+        }
+    }
+
+    fn attach_interactive(&self, args: &[&str]) -> Result<()> {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.history.lock().unwrap().push(key.clone());
+
+        let lock = self.responses.lock().unwrap();
+        match lock.get(&key) {
+            Some(MockResponse::Output(_)) => Ok(()),
+            Some(MockResponse::Error(e)) => bail!("{}", e),
+            Some(MockResponse::Closure(f)) => {
+                f(&key)?;
+                Ok(())
+            }
+            None => Ok(()),
         }
     }
 }
@@ -187,7 +229,12 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
     }
 
     pub fn attach_session(&self, name: &str) -> Result<()> {
-        self.runner.run(&["attach-session", "-t", name])?;
+        self.runner.attach_interactive(&["attach-session", "-t", name])?;
+        Ok(())
+    }
+
+    pub fn switch_client(&self, name: &str) -> Result<()> {
+        self.runner.run(&["switch-client", "-t", name])?;
         Ok(())
     }
 

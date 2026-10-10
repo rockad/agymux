@@ -154,19 +154,38 @@ fn handle_attach(
     config: &Config,
     args: &[String],
 ) -> Result<()> {
+    use std::io::IsTerminal;
+
+    // Case 1: Already inside an active tmux session
     if std::env::var("TMUX").is_ok() {
-        let mut run_args = Vec::new();
-        if !args.is_empty() {
-            run_args.extend_from_slice(args);
-        } else {
-            run_args.push("-c".to_string());
+        if let Some(curr_session) = tmux::TmuxDriver::current_session() {
+            if curr_session == session_name {
+                // Already inside the requested session: run agy in this session/window
+                let mut run_args = Vec::new();
+                if !args.is_empty() {
+                    run_args.extend_from_slice(args);
+                } else {
+                    run_args.push("-c".to_string());
+                }
+                return run_runner(project, run_args);
+            }
         }
-        return run_runner(project, run_args);
+        // Inside tmux, but targeting a different session: switch client to it
+        if !tmux::TmuxDriver::session_exists(session_name) {
+            let mut run_cmd = format!("agymux run --project '{}'", project);
+            if !args.is_empty() {
+                run_cmd.push(' ');
+                run_cmd.push_str(&args.join(" "));
+            } else {
+                run_cmd.push_str(" -c");
+            }
+            tmux::TmuxDriver::ensure_session(session_name, dir, config, Some(&run_cmd), Some("+ new"))?;
+        }
+        return tmux::TmuxDriver::switch_client(session_name);
     }
 
-    if tmux::TmuxDriver::session_exists(session_name) {
-        tmux::TmuxDriver::attach_session(session_name)?;
-    } else {
+    // Case 2: Ensure session exists (prefer existing session; only scaffold if missing)
+    if !tmux::TmuxDriver::session_exists(session_name) {
         let mut run_cmd = format!("agymux run --project '{}'", project);
         if !args.is_empty() {
             run_cmd.push(' ');
@@ -175,8 +194,19 @@ fn handle_attach(
             run_cmd.push_str(" -c");
         }
         tmux::TmuxDriver::ensure_session(session_name, dir, config, Some(&run_cmd), Some("+ new"))?;
-        tmux::TmuxDriver::attach_session(session_name)?;
     }
+
+    // Case 3: Outside tmux - attach to the existing session
+    // Check if stdin or stdout is a terminal (SSH interactive vs non-interactive / script)
+    if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+        tmux::TmuxDriver::attach_session(session_name)?;
+    } else {
+        eprintln!(
+            "agymux: Session '{}' is running in the background. (No interactive terminal detected; attach with: tmux attach -t {})",
+            session_name, session_name
+        );
+    }
+
     Ok(())
 }
 
