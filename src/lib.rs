@@ -179,7 +179,13 @@ fn handle_attach(
             } else {
                 run_cmd.push_str(" -c");
             }
-            tmux::TmuxDriver::ensure_session(session_name, dir, config, Some(&run_cmd), Some("+ new"))?;
+            tmux::TmuxDriver::ensure_session(
+                session_name,
+                dir,
+                config,
+                Some(&run_cmd),
+                Some("+ new"),
+            )?;
         }
         return tmux::TmuxDriver::switch_client(session_name);
     }

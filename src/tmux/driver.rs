@@ -272,7 +272,11 @@ mod tests {
         assert!(client.switch_client("agy-other").is_ok());
         assert_eq!(
             mock.last_call(),
-            Some(vec!["switch-client".into(), "-t".into(), "agy-other".into()])
+            Some(vec![
+                "switch-client".into(),
+                "-t".into(),
+                "agy-other".into()
+            ])
         );
     }
 

@@ -229,7 +229,8 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
     }
 
     pub fn attach_session(&self, name: &str) -> Result<()> {
-        self.runner.attach_interactive(&["attach-session", "-t", name])?;
+        self.runner
+            .attach_interactive(&["attach-session", "-t", name])?;
         Ok(())
     }
 
