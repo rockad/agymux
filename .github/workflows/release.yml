@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-release:
+    name: Build (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: false
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            use_cross: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            use_cross: true
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            use_cross: false
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            use_cross: false
+          - target: universal-apple-darwin
+            os: macos-latest
+            use_cross: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust target
+        if: matrix.target != 'universal-apple-darwin'
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Add Universal macOS targets
+        if: matrix.target == 'universal-apple-darwin'
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+
+      - name: Install cross tool
+        if: matrix.use_cross
+        run: |
+          mkdir -p "${HOME}/.cargo/bin"
+          curl -fsSL https://github.com/cross-rs/cross/releases/download/v0.2.5/cross-x86_64-unknown-linux-musl.tar.gz | tar -xz -C "${HOME}/.cargo/bin"
+          echo "${HOME}/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Compile release binaries
+        shell: bash
+        run: |
+          if [ "${{ matrix.target }}" = "universal-apple-darwin" ]; then
+            cargo build --release --target x86_64-apple-darwin
+            cargo build --release --target aarch64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create -output target/universal-apple-darwin/release/agymux \
+              target/x86_64-apple-darwin/release/agymux \
+              target/aarch64-apple-darwin/release/agymux
+            lipo -create -output target/universal-apple-darwin/release/ax \
+              target/x86_64-apple-darwin/release/ax \
+              target/aarch64-apple-darwin/release/ax
+          elif [ "${{ matrix.use_cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+
+      - name: Package release archive
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          ARCHIVE_NAME="agymux-${TAG}-${{ matrix.target }}"
+          PKG_DIR="dist/${ARCHIVE_NAME}"
+          mkdir -p "${PKG_DIR}/config/tmux"
+
+          cp "target/${{ matrix.target }}/release/agymux" "${PKG_DIR}/"
+          cp "target/${{ matrix.target }}/release/ax" "${PKG_DIR}/"
+          cp README.md LICENSE "${PKG_DIR}/"
+          cp config/tmux/agymux-tabs.conf "${PKG_DIR}/config/tmux/"
+          cp install.sh "${PKG_DIR}/"
+          chmod +x "${PKG_DIR}/agymux" "${PKG_DIR}/ax" "${PKG_DIR}/install.sh"
+
+          tar -czf "dist/${ARCHIVE_NAME}.tar.gz" -C dist "${ARCHIVE_NAME}"
+
+          cd dist
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          else
+            shasum -a 256 "${ARCHIVE_NAME}.tar.gz" > "${ARCHIVE_NAME}.tar.gz.sha256"
+          fi
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble release assets and compute unified checksums
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          cp artifacts/*.tar.gz release-assets/
+          cp artifacts/*.tar.gz.sha256 release-assets/
+
+          cd release-assets
+          sha256sum *.tar.gz > SHA256SUMS
+
+          echo "## Checksums (SHA256)" > ../release_summary.md
+          echo "" >> ../release_summary.md
+          echo "| Artifact | SHA256 Checksum |" >> ../release_summary.md
+          echo "| :--- | :--- |" >> ../release_summary.md
+          while read -r sum file; do
+            echo "| \`$file\` | \`$sum\` |" >> ../release_summary.md
+          done < SHA256SUMS
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/*.tar.gz
+            release-assets/*.tar.gz.sha256
+            release-assets/SHA256SUMS
+          generate_release_notes: true
+          append_body: true
+          body_path: release_summary.md

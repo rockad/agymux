@@ -13,11 +13,13 @@ use std::{
 };
 
 use crate::cli::ScopeArg;
+use crate::config::StartupAction;
 use crate::ui::{
     helper::{self, HelperState},
     palette::{self, PaletteResult, PaletteState},
-    picker::{self, PickerResult, PickerState},
+    picker::{self, ItemKind, PickerResult, PickerState},
     project_picker::{self, ProjectPickerResult, ProjectPickerState},
+    startup,
 };
 
 /// RAII Terminal Guard ensuring clean terminal restoration on drop or panic
@@ -199,4 +201,92 @@ pub fn run_helper() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run picker in bind mode to select a conversation ID for the active tab
+pub fn run_picker_for_bind(
+    scope: ScopeArg,
+    project: String,
+    workdir: PathBuf,
+) -> Result<Option<String>> {
+    let mut guard = TerminalGuard::enter()?;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    let mut state = PickerState::new(scope, project, workdir);
+
+    loop {
+        terminal.draw(|f| {
+            let area = f.area();
+            picker::render(f, area, &mut state);
+        })?;
+
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+                match picker::handle_key(key, &mut state) {
+                    PickerResult::Continue => {}
+                    PickerResult::Select(candidate) => {
+                        guard.leave();
+                        let cid = match &candidate.kind {
+                            ItemKind::Historical {
+                                conversation_id, ..
+                            } => Some(conversation_id.clone()),
+                            ItemKind::OpenTab {
+                                conversation_id, ..
+                            } => conversation_id.clone(),
+                            ItemKind::NewTab => None,
+                        };
+                        return Ok(cid);
+                    }
+                    PickerResult::Cancel => {
+                        guard.leave();
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Run interactive startup lifecycle selector modal
+pub fn run_startup_selector(
+    project: String,
+    latest_summary: Option<(String, String)>,
+) -> Result<Option<(StartupAction, bool)>> {
+    let mut guard = TerminalGuard::enter()?;
+    let backend = CrosstermBackend::new(io::stdout());
+    let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
+
+    let mut state = startup::StartupState::new(project, latest_summary);
+
+    loop {
+        terminal.draw(|f| {
+            let area = f.area();
+            startup::render(f, area, &state);
+        })?;
+
+        if event::poll(Duration::from_millis(50))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Press {
+                    continue;
+                }
+                match startup::handle_key(key, &mut state) {
+                    startup::StartupResult::Continue => {}
+                    startup::StartupResult::Confirm(action, remember) => {
+                        guard.leave();
+                        return Ok(Some((action, remember)));
+                    }
+                    startup::StartupResult::Cancel => {
+                        guard.leave();
+                        return Ok(None);
+                    }
+                }
+            }
+        }
+    }
 }

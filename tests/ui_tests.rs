@@ -62,7 +62,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 10);
+    assert_eq!(state.items.len(), 14);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -73,7 +73,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     assert!(rendered_text.contains("Command Palette"));
     assert!(rendered_text.contains("Action >"));
 
-    // Test typing and filtering
+    // Test typing and filtering for "ren"
     let char_r = KeyEvent::new(KeyCode::Char('r'), KeyModifiers::NONE);
     let char_e = KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE);
     let char_n = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::NONE);
@@ -84,6 +84,58 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     assert_eq!(state.query, "ren");
     assert!(!state.filtered_indices.is_empty());
     assert_eq!(state.selected_action(), Some(PaletteAction::RenameTab));
+
+    // Test query for "quit" / "exit" finds QuitKeepTabs
+    state.query.clear();
+    for c in "quit".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::QuitKeepTabs));
+
+    state.query.clear();
+    for c in "exit".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::QuitKeepTabs));
+
+    // Test query for "bind" finds BindConversation
+    state.query.clear();
+    for c in "bind".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(
+        state.selected_action(),
+        Some(PaletteAction::BindConversation)
+    );
+
+    // Test query for "terminal" finds NewTerminalTab
+    state.query.clear();
+    for c in "terminal".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::NewTerminalTab));
+
+    // Test query for "main" finds SwitchToMain
+    state.query.clear();
+    for c in "main".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::SwitchToMain));
 }
 
 #[test]

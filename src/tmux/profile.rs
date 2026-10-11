@@ -18,15 +18,49 @@ impl TmuxProfile {
         let position = &config.theme.status_position;
         let cyrillic = config.keybindings.bilingual_cyrillic;
 
-        // Monokai Pro Octagon tokens
-        let bg = "#282a3a";
-        let fg = "#eaf2f1";
-        let inactive_bg = "#221f22";
-        let inactive_fg = "#727072";
-        let active_accent = "#a9dc76"; // green pill
-        let active_text = "#282a3a";
-        let prefix_alert = "#ff6188"; // pink
-        let _running_dot = "#fc9867"; // orange
+        // Theming: terminal default inheritance vs custom preset
+        let is_custom_octagon = config.theme.preset == "monokai-pro-octagon";
+
+        let bg = if is_custom_octagon {
+            "#282a3a"
+        } else {
+            "default"
+        };
+        let fg = if is_custom_octagon {
+            "#eaf2f1"
+        } else {
+            "default"
+        };
+        let inactive_bg = if is_custom_octagon {
+            "#221f22"
+        } else {
+            "default"
+        };
+        let inactive_fg = if is_custom_octagon {
+            "#727072"
+        } else {
+            "default"
+        };
+        let active_accent = if is_custom_octagon {
+            "#a9dc76"
+        } else {
+            "default"
+        };
+        let active_text = if is_custom_octagon {
+            "#282a3a"
+        } else {
+            "default"
+        };
+        let prefix_alert = if is_custom_octagon {
+            "#ff6188"
+        } else {
+            "default"
+        };
+        let purple = if is_custom_octagon {
+            "#ab9df2"
+        } else {
+            "default"
+        };
 
         let mut lines = Vec::new();
         lines.push("# agymux dynamic tmux configuration".to_string());
@@ -49,23 +83,38 @@ impl TmuxProfile {
         lines.push("set -g status-left-length 40".to_string());
         lines.push("set -g status-right-length 60".to_string());
 
-        let purple = "#ab9df2";
+        // Status Left & Window formats: Flat vs Rounded Pills vs Terminal Default
+        let (status_left, window_format, active_window_format) = if config.theme.rounded_pills
+            && is_custom_octagon
+        {
+            let s_left = format!(
+                "#{{?client_prefix,#[fg={prefix_alert}]#[bg={bg}]#[bg={prefix_alert}]#[fg={bg}]#[bold] 󰘳 PREFIX #[fg={prefix_alert}]#[bg={bg}] ,#[fg={purple}]#[bg={bg}]#[bg={purple}]#[fg={bg}]#[bold] #S #[fg={purple}]#[bg={bg}] }}"
+            );
+            let w_fmt = format!(
+                "#[fg={inactive_bg}]#[bg={bg}]#[bg={inactive_bg}]#[fg={inactive_fg}] #I #W #[fg={inactive_bg}]#[bg={bg}]"
+            );
+            let aw_fmt = format!(
+                "#[fg={active_accent}]#[bg={bg}]#[bg={active_accent}]#[fg={active_text}]#[bold] #I #W #[fg={active_accent}]#[bg={bg}]"
+            );
+            (s_left, w_fmt, aw_fmt)
+        } else if is_custom_octagon {
+            let s_left =
+                "#{{?client_prefix,#[fg=#282a3a]#[bg=#ff6188]#[bold] 󰘳 PREFIX #[default] ,#[fg=#282a3a]#[bg=#ab9df2]#[bold] #S #[default] }}".to_string();
+            let w_fmt = "#[fg=#727072,bg=#221f22] #I #W #[default]".to_string();
+            let aw_fmt = "#[fg=#282a3a,bg=#a9dc76,bold] #I #W #[default]".to_string();
+            (s_left, w_fmt, aw_fmt)
+        } else {
+            // Default: inherit terminal foreground and background without hardcoded theme
+            let s_left =
+                "#{{?client_prefix,#[reverse,bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }}"
+                    .to_string();
+            let w_fmt = " #I #W ".to_string();
+            let aw_fmt = "#[reverse,bold] #I #W #[default]".to_string();
+            (s_left, w_fmt, aw_fmt)
+        };
 
-        // Status Left: Prefix indicator & session name (NO commas inside style brackets)
-        let status_left = format!(
-            "#{{?client_prefix,#[fg={prefix_alert}]#[bg={bg}]#[bg={prefix_alert}]#[fg={bg}]#[bold] 󰘳 PREFIX #[fg={prefix_alert}]#[bg={bg}] ,#[fg={purple}]#[bg={bg}]#[bg={purple}]#[fg={bg}]#[bold] #S #[fg={purple}]#[bg={bg}] }}"
-        );
         lines.push(format!("set -g status-left \"{}\"", status_left));
-
-        // Window status format with rounded pills
         lines.push("setw -g window-status-separator \" \"".to_string());
-        let window_format = format!(
-            "#[fg={inactive_bg}]#[bg={bg}]#[bg={inactive_bg}]#[fg={inactive_fg}] #I #W #[fg={inactive_bg}]#[bg={bg}]"
-        );
-        let active_window_format = format!(
-            "#[fg={active_accent}]#[bg={bg}]#[bg={active_accent}]#[fg={active_text}]#[bold] #I #W #[fg={active_accent}]#[bg={bg}]"
-        );
-
         lines.push(format!(
             "setw -g window-status-format \"{}\"",
             window_format
@@ -112,6 +161,12 @@ impl TmuxProfile {
         lines.push("bind x kill-window".to_string());
         lines.push("bind d detach-client".to_string());
         lines.push("bind r refresh-client".to_string());
+        lines.push("bind q detach-client".to_string());
+        lines.push("bind b display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
+        lines.push("bind t new-window -n \"term\" \"$SHELL\"".to_string());
+        lines.push(
+            "bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
+        );
 
         // Bilingual Cyrillic bindings
         if cyrillic {
@@ -133,6 +188,12 @@ impl TmuxProfile {
             lines.push("bind ч kill-window".to_string());
             lines.push("bind в detach-client".to_string());
             lines.push("bind к refresh-client".to_string());
+            lines.push("bind й detach-client".to_string());
+            lines.push("bind и display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
+            lines.push("bind е new-window -n \"term\" \"$SHELL\"".to_string());
+            lines.push(
+                "bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
+            );
         }
 
         // Direct tab switching (Prefix + 1..9)
@@ -157,15 +218,19 @@ mod tests {
         let config = Config::default();
         let content = TmuxProfile::render_content(&config);
 
-        // Scan all #[...] brackets and verify none contain commas
+        // Scan status-left conditional #[...] brackets and verify none contain commas
+        let status_left = content
+            .lines()
+            .find(|l| l.contains("status-left"))
+            .expect("status-left found");
         let mut idx = 0;
-        while let Some(open) = content[idx..].find("#[") {
+        while let Some(open) = status_left[idx..].find("#[") {
             let start = idx + open + 2;
-            if let Some(close) = content[start..].find(']') {
-                let style_token = &content[start..start + close];
+            if let Some(close) = status_left[start..].find(']') {
+                let style_token = &status_left[start..start + close];
                 assert!(
                     !style_token.contains(','),
-                    "Found illegal comma inside style bracket #[{}]: would break tmux status conditional formatting",
+                    "Found illegal comma inside status-left style bracket #[{}]: would break tmux status conditional formatting",
                     style_token
                 );
                 idx = start + close + 1;
@@ -176,19 +241,53 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_pill_glyphs_and_defaults() {
+    fn test_profile_flat_tabs_and_defaults() {
         let config = Config::default();
         let content = TmuxProfile::render_content(&config);
 
-        assert!(content.contains(''));
-        assert!(content.contains(''));
+        // Flat tabs and terminal inheritance by default (zero hardcoded theme, zero rounded glyphs)
+        assert!(!content.contains(''));
+        assert!(!content.contains(''));
+        assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
+        assert!(content.contains("setw -g window-status-format \" #I #W \""));
+        assert!(content
+            .contains("setw -g window-status-current-format \"#[reverse,bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-position top"));
         assert!(content.contains("set -g prefix C-Space"));
         assert!(content
             .contains("bind c new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind q detach-client"));
+        assert!(content.contains("bind b display-popup -E -w 75% -h 60% \"agymux bind\""));
+        assert!(content.contains("bind t new-window -n \"term\" \"$SHELL\""));
+        assert!(content.contains("bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
         // Check cyrillic bindings by default
         assert!(content.contains("bind с new-window"));
         assert!(content.contains("bind ы display-popup"));
+        assert!(content.contains("bind й detach-client"));
+        assert!(content.contains("bind и display-popup -E -w 75% -h 60% \"agymux bind\""));
+        assert!(content.contains("bind е new-window -n \"term\" \"$SHELL\""));
+        assert!(content.contains("bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
+    }
+
+    #[test]
+    fn test_profile_custom_octagon_preset() {
+        let mut config = Config::default();
+        config.theme.preset = "monokai-pro-octagon".to_string();
+        let content = TmuxProfile::render_content(&config);
+
+        assert!(content.contains("#[fg=#727072,bg=#221f22] #I #W #[default]"));
+        assert!(content.contains("#[fg=#282a3a,bg=#a9dc76,bold] #I #W #[default]"));
+    }
+
+    #[test]
+    fn test_profile_rounded_pills_when_enabled() {
+        let mut config = Config::default();
+        config.theme.preset = "monokai-pro-octagon".to_string();
+        config.theme.rounded_pills = true;
+        let content = TmuxProfile::render_content(&config);
+
+        assert!(content.contains(''));
+        assert!(content.contains(''));
     }
 
     #[test]

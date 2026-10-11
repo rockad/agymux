@@ -17,21 +17,37 @@ for legacy in agymux-tab-picker agymux-tab-runner agymux-palette agymux-project-
     rm -f "${BIN_DIR}/$legacy"
 done
 
-if command -v cargo >/dev/null 2>&1; then
+if [[ -f "${REPO_DIR}/agymux" && -f "${REPO_DIR}/ax" ]]; then
+    echo "  -> Installing pre-built binaries to $BIN_DIR"
+    cp -f "${REPO_DIR}/agymux" "${BIN_DIR}/agymux"
+    cp -f "${REPO_DIR}/ax" "${BIN_DIR}/ax"
+    chmod +x "${BIN_DIR}/agymux" "${BIN_DIR}/ax"
+elif [[ -f "${REPO_DIR}/target/release/agymux" && -f "${REPO_DIR}/target/release/ax" ]]; then
+    echo "  -> Linking release binaries to $BIN_DIR"
+    ln -sf "${REPO_DIR}/target/release/agymux" "${BIN_DIR}/agymux"
+    ln -sf "${REPO_DIR}/target/release/ax" "${BIN_DIR}/ax"
+elif command -v cargo >/dev/null 2>&1; then
     echo "  -> Building release binaries with cargo"
     (cd "${REPO_DIR}" && cargo build --release)
+    ln -sf "${REPO_DIR}/target/release/agymux" "${BIN_DIR}/agymux"
+    ln -sf "${REPO_DIR}/target/release/ax" "${BIN_DIR}/ax"
 elif [[ -x "${HOME}/.cargo/bin/cargo" ]]; then
     echo "  -> Building release binaries with ~/.cargo/bin/cargo"
     (cd "${REPO_DIR}" && "${HOME}/.cargo/bin/cargo" build --release)
+    ln -sf "${REPO_DIR}/target/release/agymux" "${BIN_DIR}/agymux"
+    ln -sf "${REPO_DIR}/target/release/ax" "${BIN_DIR}/ax"
+else
+    echo "Error: No binaries found and cargo is not available." >&2
+    exit 1
 fi
-
-echo "  -> Linking agymux and ax to $BIN_DIR"
-ln -sf "${REPO_DIR}/target/release/agymux" "${BIN_DIR}/agymux"
-ln -sf "${REPO_DIR}/target/release/ax" "${BIN_DIR}/ax"
 
 # 2. Wire tmux configuration
 mkdir -p "$TMUX_CONF_DIR"
-ln -sf "${REPO_DIR}/config/tmux/agymux-tabs.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
+if [[ -d "${REPO_DIR}/.git" ]]; then
+    ln -sf "${REPO_DIR}/config/tmux/agymux-tabs.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
+elif [[ -f "${REPO_DIR}/config/tmux/agymux-tabs.conf" ]]; then
+    cp -f "${REPO_DIR}/config/tmux/agymux-tabs.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
+fi
 
 if [[ -f "$TMUX_CONF" ]]; then
     if ! grep -q "agymux-tabs.conf" "$TMUX_CONF"; then

@@ -89,7 +89,7 @@ fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
         return None;
     }
 
-    // Check if JSON array e.g. ["file:///home/rockad/projects/doppelganger"]
+    // Check if JSON array e.g. ["file:///home/user/projects/repo"]
     if s.starts_with('[') {
         if let Ok(serde_json::Value::Array(arr)) = serde_json::from_str::<serde_json::Value>(s) {
             for v in arr {
@@ -363,14 +363,14 @@ mod tests {
         let now = chrono::Utc::now().timestamp();
         conn.execute(
             "INSERT INTO conversations (conversation_id, project_id, project_uri, title, summary, updated_at)
-             VALUES ('conv-1', 'agymux', 'file:///home/rockad/projects/agymux', 'Refactor engine', 'summary', ?1)",
+             VALUES ('conv-1', 'agymux', 'file:///home/user/projects/agymux', 'Refactor engine', 'summary', ?1)",
             [now - 120],
         )
         .unwrap();
 
         conn.execute(
             "INSERT INTO conversations (conversation_id, project_id, project_uri, title, summary, updated_at)
-             VALUES ('conv-2', 'other', 'file:///home/rockad/projects/other', 'Other work', '', ?1)",
+             VALUES ('conv-2', 'other', 'file:///home/user/projects/other', 'Other work', '', ?1)",
             [now - 500],
         )
         .unwrap();
@@ -382,12 +382,12 @@ mod tests {
         assert_eq!(global[0].title, "Refactor engine");
         assert_eq!(
             global[0].project_path.as_deref(),
-            Some("/home/rockad/projects/agymux")
+            Some("/home/user/projects/agymux")
         );
         assert_eq!(global[0].relative_time, "2m ago");
 
         let local = db
-            .get_local_conversations(Path::new("/home/rockad/projects/agymux"))
+            .get_local_conversations(Path::new("/home/user/projects/agymux"))
             .unwrap();
         assert_eq!(local.len(), 1);
         assert_eq!(local[0].id, "conv-1");
@@ -411,7 +411,7 @@ mod tests {
 
         conn.execute(
             "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time)
-             VALUES ('conv-cs-1', 'doppelganger', '[\"file:///home/rockad/projects/doppelganger\"]', 'Vault cleanup', 'preview', '2026-10-07 10:00:00+00:00')",
+             VALUES ('conv-cs-1', 'testproj', '[\"file:///home/user/projects/testproj\"]', 'Vault cleanup', 'preview', '2026-10-07 10:00:00+00:00')",
             [],
         )
         .unwrap();
@@ -423,7 +423,7 @@ mod tests {
         assert_eq!(global[0].title, "Vault cleanup");
         assert_eq!(
             global[0].project_path.as_deref(),
-            Some("/home/rockad/projects/doppelganger")
+            Some("/home/user/projects/testproj")
         );
     }
 
@@ -445,8 +445,8 @@ mod tests {
         assert_eq!(format_relative_time(now - 3599), "59m ago");
         assert_eq!(format_relative_time(now - 3600), "1h ago");
         assert_eq!(format_relative_time(now - 82800), "23h ago");
-        assert_eq!(format_relative_time(now - 86400), "1d ago");
-        assert_eq!(format_relative_time(now - 2592000), "30d ago");
+        assert_eq!(format_relative_time(now - 86400 * 5), "5d ago");
+        assert_eq!(format_relative_time(now - 86400 * 45), "1mo ago");
         // Future timestamp edge case
         assert_eq!(format_relative_time(now + 100), "just now");
     }
@@ -484,7 +484,7 @@ mod tests {
         let global = db.get_global_conversations().unwrap();
         assert!(global.is_empty());
         let local = db
-            .get_local_conversations(Path::new("/home/rockad/projects/agymux"))
+            .get_local_conversations(Path::new("/home/user/projects/agymux"))
             .unwrap();
         assert!(local.is_empty());
     }

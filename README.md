@@ -14,15 +14,15 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 - **Sub-Millisecond Cold-Start (< 1 ms):** Written in Rust with Ratatui and bundled C-SQLite. Modals launch in ~700 µs inside `tmux display-popup`.
 - **Zero External CLI Dependencies:** Bundled SQLite (`rusqlite`), streaming NDJSON parser (`serde_json`), and built-in fuzzy matching (`nucleo-matcher`). Does not require `fzf`, `jq`, or external `sqlite3`.
 - **Dual Binaries (`agymux` & `ax`):** Both commands are built and installed identically. Use `agymux` for descriptive clarity and `ax` for ultra-fast 2-keystroke execution.
-- **Monokai Pro Octagon Top Tabs:** Visual status strip positioned at the top of the terminal (`status-position top`) styled in `#282a3a` warm dark grey with Powerline rounded pills (`` / ``).
+- **Monokai Pro Octagon Top Tabs:** Visual status strip positioned at the top of the terminal (`status-position top`) styled in `#282a3a` warm dark grey with crisp rectangular highlighted active tabs (and optional Powerline rounded pills).
 - **Two-Pane Conversation Switcher (`Ctrl+Space s` / `ы`):**
   - **Left Pane (45%):** Active open tabs and historical project conversations with fuzzy search. Supports `Tab` or `Ctrl+A` to toggle between **Local Project** and **Global Machine** search scope.
   - **Right Pane (55%):** Live rich transcript preview showing token counts, user prompt, latest turn excerpt, and executed tools.
 - **Global Project Hopper (`Ctrl+Space P` / `З`):** Search and jump between repositories across `~/projects/` and active `agy-*` sessions.
-- **Quick Command Palette (`Ctrl+Space p` / `з`):** Interactive action palette (tab rename, fork, new worktree, launch flags, cheatsheet).
+- **Quick Command Palette (`Ctrl+Space p` / `з`):** Interactive action palette (tab rename, bind, fork, new worktree, launch flags, quit cockpit, cheatsheet).
 - **Git Worktree Isolation (`Ctrl+Space w` / `ц`):** Create isolated git worktrees on demand under `.worktrees/<branch>`.
 - **Bilingual Keymap Resilience:** Every shortcut features paired English and Cyrillic (RussianWin) bindings so CapsLock layout switching never produces dead keys.
-- **Instant Prompt-Based Naming:** Windows are named immediately from the first prompt argument, updated dynamically in the background.
+- **Instant Prompt-Based Naming:** Windows are named immediately from the first prompt argument, updated dynamically in the background with automatic title reconciliation.
 
 ---
 
@@ -35,11 +35,15 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 | **Command Palette** | `Ctrl+Space p` / `з` | `⚙️ Open Command Palette` |
 | **Keyboard Cheatsheet** | `Ctrl+Space h` / `р` / `?` | `❓ Keyboard Shortcuts & Help` |
 | **New Tab** | `Ctrl+Space c` / `с` | `➕ New Tab` |
+| **Bind Conversation to Tab** | `Ctrl+Space b` / `и` | `🔗 Bind Conversation to Tab` |
+| **New Plain Terminal Tab** | `Ctrl+Space t` / `е` | `💻 New Plain Terminal Tab` |
+| **Switch to Main Terminal** | `Ctrl+Space m` / `ь` | `🖥️ Switch to Main Terminal (main)` |
 | **New Worktree Tab** | `Ctrl+Space w` / `ц` | `📁 New Worktree Tab (Branch)` |
 | **Rename Active Tab** | `Ctrl+Space r` / `к` | `📝 Rename Active Tab` |
 | **Fork Conversation** | `Ctrl+Space f` / `а` | `🌿 Fork Conversation (-c)` |
 | **Launch with Custom Flags** | `Ctrl+Space l` / `д` | `⚙️ Launch with Custom Flags` |
 | **Close Tab** | `Ctrl+Space x` / `ч` | `🧹 Close Tab` |
+| **Quit Cockpit (Keep Tabs)** | `Ctrl+Space q` / `й` | `🚪 Quit Cockpit (Keep Tabs Running)` |
 | **Detach Session** | `Ctrl+Space d` / `в` | `🚪 Detach Session` |
 | **Direct Tab Jump** | `Ctrl+Space 1` .. `9` | N/A |
 | **Cycle Adjacent Tabs** | `Ctrl+Space Left` / `Right` | N/A |
@@ -88,6 +92,7 @@ Commands:
   palette  Open quick command palette modal
   helper   Display keyboard shortcuts cheatsheet modal
   new      Open a new conversation tab in current session
+  bind     Bind a conversation to the current tab
   run      Internal process runner with instant prompt-based window naming
   preview  Render rich preview for a conversation ID
   ls       List active agymux sessions

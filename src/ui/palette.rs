@@ -25,6 +25,10 @@ pub enum PaletteAction {
     SwitchProject,
     Shortcuts,
     Detach,
+    QuitKeepTabs,
+    BindConversation,
+    NewTerminalTab,
+    SwitchToMain,
 }
 
 #[derive(Debug, Clone)]
@@ -98,6 +102,30 @@ impl PaletteItem {
                 title: "Detach Session",
                 shortcut: "Ctrl+Space d / в",
             },
+            PaletteItem {
+                action: PaletteAction::QuitKeepTabs,
+                icon: "🚪",
+                title: "Quit Cockpit (Keep Tabs Running)",
+                shortcut: "Ctrl+Space q / й",
+            },
+            PaletteItem {
+                action: PaletteAction::BindConversation,
+                icon: "🔗",
+                title: "Bind Conversation to Tab",
+                shortcut: "Ctrl+Space b / и",
+            },
+            PaletteItem {
+                action: PaletteAction::NewTerminalTab,
+                icon: "💻",
+                title: "New Plain Terminal Tab",
+                shortcut: "Ctrl+Space t / е",
+            },
+            PaletteItem {
+                action: PaletteAction::SwitchToMain,
+                icon: "🖥️ ",
+                title: "Switch to Main Terminal (main)",
+                shortcut: "Ctrl+Space m / ь",
+            },
         ]
     }
 }
@@ -128,7 +156,7 @@ impl PaletteState {
     }
 
     pub fn filter(&mut self) {
-        let q = self.query.to_lowercase();
+        let q = self.query.to_lowercase().trim().to_string();
         self.filtered_indices = self
             .items
             .iter()
@@ -137,7 +165,31 @@ impl PaletteState {
                 if q.is_empty() {
                     return true;
                 }
-                item.title.to_lowercase().contains(&q) || item.shortcut.to_lowercase().contains(&q)
+                let title = item.title.to_lowercase();
+                let shortcut = item.shortcut.to_lowercase();
+                if title.contains(&q) || shortcut.contains(&q) {
+                    return true;
+                }
+                // Synonyms & keywords
+                match item.action {
+                    PaletteAction::QuitKeepTabs => {
+                        "quit".contains(&q) || "exit".contains(&q) || q == "q" || q == "й"
+                    }
+                    PaletteAction::Detach => "detach".contains(&q),
+                    PaletteAction::BindConversation => {
+                        "bind".contains(&q) || "attach".contains(&q) || "connect".contains(&q)
+                    }
+                    PaletteAction::NewTerminalTab => {
+                        "terminal".contains(&q)
+                            || "term".contains(&q)
+                            || "shell".contains(&q)
+                            || "sh".contains(&q)
+                    }
+                    PaletteAction::SwitchToMain => {
+                        "main".contains(&q) || "terminal".contains(&q) || "term".contains(&q)
+                    }
+                    _ => false,
+                }
             })
             .map(|(idx, _)| idx)
             .collect();
@@ -444,6 +496,35 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
         }
         PaletteAction::Detach => {
             let _ = Command::new("tmux").arg("detach-client").status();
+        }
+        PaletteAction::QuitKeepTabs => {
+            let _ = Command::new("tmux").arg("detach-client").status();
+        }
+        PaletteAction::BindConversation => {
+            let _ = Command::new("tmux")
+                .args([
+                    "display-popup",
+                    "-E",
+                    "-w",
+                    "75%",
+                    "-h",
+                    "60%",
+                    "agymux bind",
+                ])
+                .status();
+        }
+        PaletteAction::NewTerminalTab => {
+            let _ = Command::new("tmux")
+                .args(["new-window", "-n", "term", "$SHELL"])
+                .status();
+        }
+        PaletteAction::SwitchToMain => {
+            let _ = Command::new("tmux")
+                .args([
+                    "run-shell",
+                    "tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main",
+                ])
+                .status();
         }
     }
     Ok(())

@@ -82,6 +82,12 @@ pub enum Commands {
     /// List active agymux sessions
     Ls,
 
+    /// Bind a conversation ID to the active tmux tab
+    Bind {
+        /// Optional conversation ID (UUID). If omitted, opens interactive picker.
+        conversation_id: Option<String>,
+    },
+
     /// Internal background watcher for renaming windows
     #[command(hide = true)]
     Watch {
@@ -253,6 +259,26 @@ mod tests {
                 assert_eq!(exclude_id.as_deref(), Some("last-uuid"));
             }
             other => panic!("expected Watch, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cli_bind_subcommand() {
+        let cli_no_id = Cli::try_parse_from(["agymux", "bind"]).expect("parsing succeeds");
+        match cli_no_id.command {
+            Some(Commands::Bind { conversation_id }) => {
+                assert!(conversation_id.is_none());
+            }
+            other => panic!("expected Bind, got {:?}", other),
+        }
+
+        let cli_with_id =
+            Cli::try_parse_from(["agymux", "bind", "conv-uuid-123"]).expect("parsing succeeds");
+        match cli_with_id.command {
+            Some(Commands::Bind { conversation_id }) => {
+                assert_eq!(conversation_id.as_deref(), Some("conv-uuid-123"));
+            }
+            other => panic!("expected Bind, got {:?}", other),
         }
     }
 }

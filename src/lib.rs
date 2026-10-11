@@ -73,6 +73,10 @@ pub fn run() -> Result<()> {
                     "project" => ui::palette::PaletteAction::SwitchProject,
                     "helper" => ui::palette::PaletteAction::Shortcuts,
                     "detach" => ui::palette::PaletteAction::Detach,
+                    "quit" => ui::palette::PaletteAction::QuitKeepTabs,
+                    "bind" => ui::palette::PaletteAction::BindConversation,
+                    "term" | "terminal" => ui::palette::PaletteAction::NewTerminalTab,
+                    "main" => ui::palette::PaletteAction::SwitchToMain,
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;
@@ -83,6 +87,10 @@ pub fn run() -> Result<()> {
 
         Some(Commands::Helper) => {
             ui::run_helper()?;
+        }
+
+        Some(Commands::Bind { conversation_id }) => {
+            run_bind(&project, &dir, conversation_id)?;
         }
 
         Some(Commands::New { name, args }) => {
@@ -156,29 +164,35 @@ fn handle_attach(
 ) -> Result<()> {
     use std::io::IsTerminal;
 
-    // Case 1: Already inside an active tmux session
-    if std::env::var("TMUX").is_ok() {
-        if let Some(curr_session) = tmux::TmuxDriver::current_session() {
-            if curr_session == session_name {
-                // Already inside the requested session: run agy in this session/window
-                let mut run_args = Vec::new();
-                if !args.is_empty() {
-                    run_args.extend_from_slice(args);
-                } else {
-                    run_args.push("-c".to_string());
+    let _ = heal_unbound_windows(project);
+
+    // If explicit arguments were passed, forward them directly
+    if !args.is_empty() {
+        if std::env::var("TMUX").is_ok() {
+            if let Some(curr_session) = tmux::TmuxDriver::current_session() {
+                if curr_session == session_name {
+                    return run_runner(project, args.to_vec());
                 }
-                return run_runner(project, run_args);
             }
-        }
-        // Inside tmux, but targeting a different session: switch client to it
-        if !tmux::TmuxDriver::session_exists(session_name) {
-            let mut run_cmd = format!("agymux run --project '{}'", project);
-            if !args.is_empty() {
+            if !tmux::TmuxDriver::session_exists(session_name) {
+                let mut run_cmd = format!("agymux run --project '{}'", project);
                 run_cmd.push(' ');
                 run_cmd.push_str(&args.join(" "));
-            } else {
-                run_cmd.push_str(" -c");
+                tmux::TmuxDriver::ensure_session(
+                    session_name,
+                    dir,
+                    config,
+                    Some(&run_cmd),
+                    Some("+ new"),
+                )?;
             }
+            return tmux::TmuxDriver::switch_client(session_name);
+        }
+
+        if !tmux::TmuxDriver::session_exists(session_name) {
+            let mut run_cmd = format!("agymux run --project '{}'", project);
+            run_cmd.push(' ');
+            run_cmd.push_str(&args.join(" "));
             tmux::TmuxDriver::ensure_session(
                 session_name,
                 dir,
@@ -187,30 +201,303 @@ fn handle_attach(
                 Some("+ new"),
             )?;
         }
-        return tmux::TmuxDriver::switch_client(session_name);
-    }
 
-    // Case 2: Ensure session exists (prefer existing session; only scaffold if missing)
-    if !tmux::TmuxDriver::session_exists(session_name) {
-        let mut run_cmd = format!("agymux run --project '{}'", project);
-        if !args.is_empty() {
-            run_cmd.push(' ');
-            run_cmd.push_str(&args.join(" "));
+        if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+            return tmux::TmuxDriver::attach_session(session_name);
         } else {
-            run_cmd.push_str(" -c");
+            eprintln!(
+                "agymux: Session '{}' is running in the background. (attach with: tmux attach -t {})",
+                session_name, session_name
+            );
+            return Ok(());
         }
-        tmux::TmuxDriver::ensure_session(session_name, dir, config, Some(&run_cmd), Some("+ new"))?;
     }
 
-    // Case 3: Outside tmux - attach to the existing session
-    // Check if stdin or stdout is a terminal (SSH interactive vs non-interactive / script)
-    if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
-        tmux::TmuxDriver::attach_session(session_name)?;
+    // If session already exists, attach or switch directly
+    if tmux::TmuxDriver::session_exists(session_name) {
+        if std::env::var("TMUX").is_ok() {
+            if let Some(curr_session) = tmux::TmuxDriver::current_session() {
+                if curr_session == session_name {
+                    // Already inside: run agy -c in this window
+                    return run_runner(project, vec!["-c".to_string()]);
+                }
+            }
+            return tmux::TmuxDriver::switch_client(session_name);
+        } else if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+            return tmux::TmuxDriver::attach_session(session_name);
+        } else {
+            eprintln!(
+                "agymux: Session '{}' is running in the background. (attach with: tmux attach -t {})",
+                session_name, session_name
+            );
+            return Ok(());
+        }
+    }
+
+    // Session does not exist yet: dispatch according to startup_action
+    let mut startup_action = config.general.startup_action;
+
+    if startup_action == crate::config::StartupAction::Ask {
+        if std::io::stdin().is_terminal() && std::io::stdout().is_terminal() {
+            let latest_summary = {
+                let db = db_path();
+                if db.exists() {
+                    rusqlite::Connection::open(&db).ok().and_then(|conn| {
+                        let pattern = format!("%{}%", project);
+                        conn.query_row(
+                            "SELECT title, strftime('%s', last_modified_time) FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                            rusqlite::params![pattern, project],
+                            |r| {
+                                let title: String = r.get(0)?;
+                                let epoch_str: Option<String> = r.get(1).ok();
+                                let rel = if let Some(Ok(epoch)) = epoch_str.map(|s| s.parse::<i64>()) {
+                                    crate::core::session::format_relative_time(epoch)
+                                } else {
+                                    "recently".to_string()
+                                };
+                                Ok((sanitize_title(&title), rel))
+                            },
+                        ).ok()
+                    })
+                } else {
+                    None
+                }
+            };
+
+            match ui::run_startup_selector(project.to_string(), latest_summary)? {
+                Some((action, remember)) => {
+                    if remember {
+                        let mut updated_config = config.clone();
+                        updated_config.general.startup_action = action;
+                        let _ = updated_config.save();
+                    }
+                    startup_action = action;
+                }
+                None => {
+                    // User cancelled (Esc / q)
+                    return Ok(());
+                }
+            }
+        } else {
+            startup_action = crate::config::StartupAction::ResumeLatest;
+        }
+    }
+
+    match startup_action {
+        crate::config::StartupAction::New => {
+            let run_cmd = format!("agymux run --project '{}'", project);
+            tmux::TmuxDriver::ensure_session(
+                session_name,
+                dir,
+                config,
+                Some(&run_cmd),
+                Some("+ new"),
+            )?;
+            if std::env::var("TMUX").is_ok() {
+                tmux::TmuxDriver::switch_client(session_name)?;
+            } else if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+                tmux::TmuxDriver::attach_session(session_name)?;
+            }
+        }
+        crate::config::StartupAction::ResumeLatest => {
+            let latest_id = {
+                let db = db_path();
+                if db.exists() {
+                    rusqlite::Connection::open(&db).ok().and_then(|conn| {
+                        let pattern = format!("%{}%", project);
+                        conn.query_row(
+                            "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                            rusqlite::params![pattern, project],
+                            |r| r.get::<_, String>(0),
+                        ).or_else(|_| {
+                            conn.query_row(
+                                "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                                [],
+                                |r| r.get::<_, String>(0),
+                            )
+                        }).ok()
+                    })
+                } else {
+                    None
+                }
+            };
+
+            let run_cmd = if let Some(ref lid) = latest_id {
+                format!("agymux run --project '{}' -c '{}'", project, lid)
+            } else {
+                format!("agymux run --project '{}'", project)
+            };
+
+            tmux::TmuxDriver::ensure_session(
+                session_name,
+                dir,
+                config,
+                Some(&run_cmd),
+                Some("+ new"),
+            )?;
+            if std::env::var("TMUX").is_ok() {
+                tmux::TmuxDriver::switch_client(session_name)?;
+            } else if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+                tmux::TmuxDriver::attach_session(session_name)?;
+            }
+        }
+        crate::config::StartupAction::Picker => {
+            ui::run_picker(cli::ScopeArg::Local, project.to_string(), dir.to_path_buf())?;
+        }
+        crate::config::StartupAction::Terminal => {
+            let _ = Command::new("tmux")
+                .args(["new-session", "-d", "-s", "main"])
+                .status();
+            if std::env::var("TMUX").is_ok() {
+                tmux::TmuxDriver::switch_client("main")?;
+            } else if std::io::stdin().is_terminal() || std::io::stdout().is_terminal() {
+                tmux::TmuxDriver::attach_session("main")?;
+            }
+        }
+        crate::config::StartupAction::Ask => unreachable!(),
+    }
+
+    Ok(())
+}
+
+/// Heal any window with title "+ new" or "agy" where @conversation_id is empty by checking SQLite
+pub fn heal_unbound_windows(project: &str) -> Result<()> {
+    if std::env::var("TMUX").is_err() {
+        return Ok(());
+    }
+
+    let session_name = format!("agy-{}", project);
+    let output = Command::new("tmux")
+        .args([
+            "list-windows",
+            "-t",
+            &session_name,
+            "-F",
+            "#{window_id}\t#{window_name}\t#{@conversation_id}",
+        ])
+        .output();
+
+    let out = match output {
+        Ok(o) if o.status.success() => o,
+        _ => return Ok(()),
+    };
+
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut unbound_windows = Vec::new();
+    let mut bound_ids = std::collections::HashSet::new();
+
+    for line in stdout.lines() {
+        let parts: Vec<&str> = line.split('\t').collect();
+        if parts.len() >= 3 {
+            let win_id = parts[0];
+            let win_name = parts[1];
+            let conv_id = parts[2];
+            if !conv_id.is_empty() {
+                bound_ids.insert(conv_id.to_string());
+            } else if win_name == "+ new" || win_name == "agy" || win_name.starts_with("+ new") {
+                unbound_windows.push(win_id.to_string());
+            }
+        }
+    }
+
+    if unbound_windows.is_empty() {
+        return Ok(());
+    }
+
+    let db = db_path();
+    if !db.exists() {
+        return Ok(());
+    }
+
+    if let Ok(conn) = rusqlite::Connection::open(&db) {
+        let pattern = format!("%{}%", project);
+        let mut stmt = match conn.prepare(
+            "SELECT conversation_id, title FROM conversation_summaries 
+             WHERE (workspace_uris LIKE ?1 OR project_id = ?2) 
+               AND title IS NOT NULL AND title != '' 
+             ORDER BY last_modified_time DESC LIMIT 10",
+        ) {
+            Ok(s) => s,
+            Err(_) => return Ok(()),
+        };
+
+        let rows = stmt.query_map(rusqlite::params![pattern, project], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        });
+
+        if let Ok(candidates) = rows {
+            for (cid, title) in candidates.flatten() {
+                if !bound_ids.contains(&cid) {
+                    if let Some(win_id) = unbound_windows.pop() {
+                        let _ = Command::new("tmux")
+                            .args(["set-option", "-w", "-t", &win_id, "@conversation_id", &cid])
+                            .status();
+                        let clean = sanitize_title(&title);
+                        let _ = Command::new("tmux")
+                            .args(["rename-window", "-t", &win_id, &clean])
+                            .status();
+                        bound_ids.insert(cid);
+                    }
+                }
+                if unbound_windows.is_empty() {
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn run_bind(project: &str, dir: &Path, conversation_id: Option<String>) -> Result<()> {
+    let _ = heal_unbound_windows(project);
+
+    let target_cid = match conversation_id {
+        Some(cid) => cid,
+        None => {
+            // Open interactive conversation picker in bind mode
+            let picked = ui::run_picker_for_bind(
+                cli::ScopeArg::Local,
+                project.to_string(),
+                dir.to_path_buf(),
+            )?;
+            match picked {
+                Some(cid) => cid,
+                None => return Ok(()),
+            }
+        }
+    };
+
+    let db = db_path();
+    let title = if db.exists() {
+        rusqlite::Connection::open(&db).ok().and_then(|conn| {
+            conn.query_row(
+                "SELECT title FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
+                [&target_cid],
+                |r| r.get::<_, String>(0),
+            )
+            .ok()
+        })
     } else {
-        eprintln!(
-            "agymux: Session '{}' is running in the background. (No interactive terminal detected; attach with: tmux attach -t {})",
-            session_name, session_name
-        );
+        None
+    };
+
+    let title_str = title.as_deref().unwrap_or("agy");
+    let clean = sanitize_title(title_str);
+
+    if std::env::var("TMUX").is_ok() {
+        let _ = Command::new("tmux")
+            .args(["set-option", "-w", "@conversation_id", &target_cid])
+            .status();
+        let _ = Command::new("tmux")
+            .args(["rename-window", &clean])
+            .status();
+        let toast = format!("Bound tab to: {} ({})", clean, target_cid);
+        let _ = Command::new("tmux")
+            .args(["display-message", &toast])
+            .status();
+    } else {
+        println!("Bound tab to: {} ({})", clean, target_cid);
     }
 
     Ok(())
@@ -244,11 +531,13 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     let in_tmux = std::env::var("TMUX").is_ok();
     let mut conv_id = None;
     let mut initial_prompt = None;
+    let mut has_continue_flag = false;
 
     // Check args for conversation id and prompt
     let mut iter = args.iter().peekable();
     while let Some(arg) = iter.next() {
         if arg == "--conversation" || arg == "-c" {
+            has_continue_flag = true;
             if let Some(next) = iter.peek() {
                 if !next.starts_with('-') {
                     conv_id = Some(next.to_string());
@@ -259,9 +548,36 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
-    let start_time = chrono::Utc::now()
-        .format("%Y-%m-%d %H:%M:%S%.6f")
-        .to_string();
+    let latest_existing_id = {
+        let db = db_path();
+        if db.exists() {
+            rusqlite::Connection::open(&db)
+                .ok()
+                .and_then(|conn| {
+                    let pattern = format!("%{}%", project);
+                    conn.query_row(
+                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                        rusqlite::params![pattern, project],
+                        |r| r.get::<_, String>(0),
+                    ).or_else(|_| {
+                        conn.query_row(
+                            "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                            [],
+                            |r| r.get::<_, String>(0),
+                        )
+                    }).ok()
+                })
+        } else {
+            None
+        }
+    };
+
+    // If -c was supplied without an argument, resolve to latest_existing_id
+    if has_continue_flag && conv_id.is_none() {
+        conv_id = latest_existing_id.clone();
+    }
+
+    let start_time = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // 1. Instant window naming and capture window id
     let target_window = if in_tmux {
@@ -301,30 +617,6 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
-    let latest_existing_id = {
-        let db = db_path();
-        if db.exists() {
-            rusqlite::Connection::open(&db)
-                .ok()
-                .and_then(|conn| {
-                    let pattern = format!("%{}%", project);
-                    conn.query_row(
-                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
-                        rusqlite::params![pattern, project],
-                        |r| r.get::<_, String>(0),
-                    ).or_else(|_| {
-                        conn.query_row(
-                            "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
-                            [],
-                            |r| r.get::<_, String>(0),
-                        )
-                    }).ok()
-                })
-        } else {
-            None
-        }
-    };
-
     // 2. Background detached watcher process for automatic title sync on new conversations
     if in_tmux && conv_id.is_none() {
         if let Some(ref win) = target_window {
@@ -352,8 +644,39 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     // 3. Assemble and execute agy
     let mut cmd = Command::new("agy");
     cmd.args(["--project", project]);
-    if !args.is_empty() {
-        cmd.args(&args);
+
+    // Build args forwarding, ensuring -c <resolved_id> is passed if resolved
+    let mut forward_args = Vec::new();
+    let mut i = 0;
+    let mut injected_cid = false;
+    while i < args.len() {
+        let a = &args[i];
+        if a == "-c" || a == "--conversation" {
+            forward_args.push(a.clone());
+            if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                forward_args.push(args[i + 1].clone());
+                i += 2;
+                injected_cid = true;
+                continue;
+            } else if let Some(ref cid) = conv_id {
+                forward_args.push(cid.clone());
+                injected_cid = true;
+                i += 1;
+                continue;
+            }
+        }
+        forward_args.push(a.clone());
+        i += 1;
+    }
+    if has_continue_flag && !injected_cid {
+        if let Some(ref cid) = conv_id {
+            forward_args.push("-c".to_string());
+            forward_args.push(cid.clone());
+        }
+    }
+
+    if !forward_args.is_empty() {
+        cmd.args(&forward_args);
     }
 
     #[cfg(unix)]
@@ -367,7 +690,6 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     #[cfg(not(unix))]
     {
         let status = cmd.status();
-        stop_watcher.store(true, Ordering::Relaxed);
         let code = match status {
             Ok(s) => s.code().unwrap_or(0),
             Err(e) => {
@@ -391,7 +713,7 @@ fn run_watcher(
     let proj = project.to_string();
     let pattern = format!("%{}%", proj);
 
-    for _ in 0..120 {
+    for _ in 0..300 {
         thread::sleep(Duration::from_millis(500));
         if !db.exists() {
             continue;
@@ -402,7 +724,7 @@ fn run_watcher(
                 SELECT conversation_id, title 
                 FROM conversation_summaries 
                 WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
-                  AND last_modified_time >= ?3
+                  AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
                   AND (?4 IS NULL OR conversation_id != ?4)
                   AND title IS NOT NULL AND title != ''
                 ORDER BY last_modified_time DESC 

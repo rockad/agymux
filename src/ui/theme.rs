@@ -5,24 +5,24 @@ use ratatui::{
     widgets::{Block, BorderType, Borders},
 };
 
-/// Monokai Pro Octagon Color Tokens
-pub const COLOR_BG: Color = Color::Rgb(0x28, 0x2a, 0x3a); // #282a3a Base warm dark grey background
-pub const COLOR_BG_ALT: Color = Color::Rgb(0x22, 0x1f, 0x22); // #221f22 Inactive tab background
-pub const COLOR_FG: Color = Color::Rgb(0xea, 0xf2, 0xf1); // #eaf2f1 Primary text foreground
-pub const COLOR_MUTED: Color = Color::Rgb(0x72, 0x70, 0x72); // #727072 Dimmed metadata
-pub const COLOR_GREEN: Color = Color::Rgb(0xa9, 0xdc, 0x76); // #a9dc76 Active tab pill (green)
-pub const COLOR_CYAN: Color = Color::Rgb(0x78, 0xdc, 0xe8); // #78dce8 Alternative active / highlight (cyan)
-pub const COLOR_PINK: Color = Color::Rgb(0xff, 0x61, 0x88); // #ff6188 Prefix indicator / alert (pink)
-pub const COLOR_ORANGE: Color = Color::Rgb(0xfc, 0x98, 0x67); // #fc9867 Running turn / agent working (orange)
-pub const COLOR_YELLOW: Color = Color::Rgb(0xff, 0xd8, 0x66); // #ffd866 Yellow warning / match highlight
-pub const COLOR_PURPLE: Color = Color::Rgb(0xab, 0x9d, 0xf2); // #ab9df2 Purple accent / project badges
+/// Standard Terminal ANSI Color Tokens (inherits terminal emulator colors by default)
+pub const COLOR_BG: Color = Color::Reset; // Inherit terminal background
+pub const COLOR_BG_ALT: Color = Color::Reset; // Inherit terminal background
+pub const COLOR_FG: Color = Color::Reset; // Primary text foreground
+pub const COLOR_MUTED: Color = Color::DarkGray; // Dimmed metadata
+pub const COLOR_GREEN: Color = Color::Green; // Active tab pill (green)
+pub const COLOR_CYAN: Color = Color::Cyan; // Alternative active / highlight (cyan)
+pub const COLOR_PINK: Color = Color::Magenta; // Prefix indicator / alert (pink)
+pub const COLOR_ORANGE: Color = Color::LightRed; // Running turn / agent working (orange)
+pub const COLOR_YELLOW: Color = Color::Yellow; // Yellow warning / match highlight
+pub const COLOR_PURPLE: Color = Color::Magenta; // Purple accent / project badges
 
 pub const PL_LEFT: &str = "";
 pub const PL_RIGHT: &str = "";
 
-/// Returns base application background and foreground style
+/// Returns base application background and foreground style (inherits terminal colors)
 pub fn base_style() -> Style {
-    Style::default().bg(COLOR_BG).fg(COLOR_FG)
+    Style::default()
 }
 
 /// Returns style for inactive/dimmed text

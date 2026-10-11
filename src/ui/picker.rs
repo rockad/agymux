@@ -98,6 +98,7 @@ impl PickerState {
     }
 
     pub fn reload_candidates(&mut self) {
+        let _ = crate::heal_unbound_windows(&self.project_name);
         let mut candidates = Vec::new();
 
         // 1. New Tab
