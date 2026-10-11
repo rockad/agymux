@@ -44,21 +44,23 @@ fi
 # 2. Wire tmux configuration
 mkdir -p "$TMUX_CONF_DIR"
 if [[ -d "${REPO_DIR}/.git" ]]; then
-    ln -sf "${REPO_DIR}/config/tmux/agymux-tabs.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
-elif [[ -f "${REPO_DIR}/config/tmux/agymux-tabs.conf" ]]; then
-    cp -f "${REPO_DIR}/config/tmux/agymux-tabs.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
+    ln -sf "${REPO_DIR}/config/tmux/agymux.conf" "${TMUX_CONF_DIR}/agymux.conf"
+    ln -sf "${TMUX_CONF_DIR}/agymux.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
+elif [[ -f "${REPO_DIR}/config/tmux/agymux.conf" ]]; then
+    cp -f "${REPO_DIR}/config/tmux/agymux.conf" "${TMUX_CONF_DIR}/agymux.conf"
+    ln -sf "${TMUX_CONF_DIR}/agymux.conf" "${TMUX_CONF_DIR}/agymux-tabs.conf"
 fi
 
 if [[ -f "$TMUX_CONF" ]]; then
-    if ! grep -q "agymux-tabs.conf" "$TMUX_CONF"; then
-        echo "  -> Adding agymux-tabs.conf source directive to $TMUX_CONF"
+    if ! grep -q "agymux.conf" "$TMUX_CONF" && ! grep -q "agymux-tabs.conf" "$TMUX_CONF"; then
+        echo "  -> Adding agymux.conf source directive to $TMUX_CONF"
         cat << 'EOF' >> "$TMUX_CONF"
 
-# Source agymux top-tab styling & keybindings
-if-shell '[ -f ~/.config/tmux/agymux-tabs.conf ]' 'source-file ~/.config/tmux/agymux-tabs.conf'
+# Source agymux configuration & keybindings
+if-shell '[ -f ~/.config/tmux/agymux.conf ]' 'source-file ~/.config/tmux/agymux.conf'
 EOF
     else
-        echo "  -> agymux-tabs.conf directive already present in $TMUX_CONF"
+        echo "  -> agymux tmux directive already present in $TMUX_CONF"
     fi
 fi
 

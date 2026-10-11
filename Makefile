@@ -57,7 +57,8 @@ dist: build
 	@cp target/release/agymux $(PKG_DIR)/
 	@cp target/release/ax $(PKG_DIR)/
 	@cp README.md LICENSE $(PKG_DIR)/
-	@cp config/tmux/agymux-tabs.conf $(PKG_DIR)/config/tmux/
+	@cp config/tmux/agymux.conf $(PKG_DIR)/config/tmux/
+	@cp -P config/tmux/agymux-tabs.conf $(PKG_DIR)/config/tmux/
 	@cp install.sh $(PKG_DIR)/
 	@chmod +x $(PKG_DIR)/agymux $(PKG_DIR)/ax $(PKG_DIR)/install.sh
 	@tar -czf $(DIST_DIR)/$(PKG_NAME).tar.gz -C $(DIST_DIR) $(PKG_NAME)
