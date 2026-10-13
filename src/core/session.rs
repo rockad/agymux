@@ -141,15 +141,13 @@ impl SessionDb {
     }
 
     /// Check if a specific table exists in the database
-    fn table_exists(&self, table_name: &str) -> bool {
-        let mut stmt = match self
-            .conn
-            .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1")
-        {
-            Ok(s) => s,
-            Err(_) => return false,
-        };
-        stmt.exists([table_name]).unwrap_or(false)
+    pub fn table_exists(&self, table_name: &str) -> bool {
+        table_exists(&self.conn, table_name)
+    }
+
+    /// Check if a specific column exists in a given table
+    pub fn column_exists(&self, table_name: &str, column_name: &str) -> bool {
+        table_has_column(&self.conn, table_name, column_name)
     }
 
     /// Query conversations local to a specific project directory
@@ -164,7 +162,14 @@ impl SessionDb {
         let pattern_name = format!("%{}%", dir_name);
 
         if self.table_exists("conversations") {
-            let sql = "
+            let hygiene = session_hygiene_conditions(&self.conn, "conversations");
+            let hygiene_sql = if hygiene.is_empty() {
+                String::new()
+            } else {
+                format!(" AND {}", hygiene.join(" AND "))
+            };
+
+            let sql = format!("
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(summary, ''), 'Untitled') AS title_clean,
                        project_uri,
@@ -174,10 +179,10 @@ impl SessionDb {
                          ELSE CAST(strftime('%s', updated_at) AS INTEGER)
                        END AS epoch_sec
                 FROM conversations
-                WHERE (project_uri LIKE ?1 OR project_uri LIKE ?2 OR project_id = ?3 OR project_id = ?4)
+                WHERE (project_uri LIKE ?1 OR project_uri LIKE ?2 OR project_id = ?3 OR project_id = ?4){}
                 ORDER BY epoch_sec DESC;
-            ";
-            let mut stmt = self.conn.prepare(sql)?;
+            ", hygiene_sql);
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(
                 rusqlite::params![pattern_full, pattern_name, dir_name, dir_str.as_ref()],
                 |row| {
@@ -204,7 +209,14 @@ impl SessionDb {
             }
             Ok(items)
         } else if self.table_exists("conversation_summaries") {
-            let sql = "
+            let hygiene = session_hygiene_conditions(&self.conn, "conversation_summaries");
+            let hygiene_sql = if hygiene.is_empty() {
+                String::new()
+            } else {
+                format!(" AND {}", hygiene.join(" AND "))
+            };
+
+            let sql = format!("
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled') AS title_clean,
                        workspace_uris,
@@ -214,10 +226,10 @@ impl SessionDb {
                          ELSE CAST(strftime('%s', last_modified_time) AS INTEGER)
                        END AS epoch_sec
                 FROM conversation_summaries
-                WHERE (workspace_uris LIKE ?1 OR workspace_uris LIKE ?2 OR project_id = ?3 OR project_id = ?4)
+                WHERE (workspace_uris LIKE ?1 OR workspace_uris LIKE ?2 OR project_id = ?3 OR project_id = ?4){}
                 ORDER BY epoch_sec DESC;
-            ";
-            let mut stmt = self.conn.prepare(sql)?;
+            ", hygiene_sql);
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(
                 rusqlite::params![pattern_full, pattern_name, dir_name, dir_str.as_ref()],
                 |row| {
@@ -251,7 +263,14 @@ impl SessionDb {
     /// Query global conversations across all projects
     pub fn get_global_conversations(&self) -> Result<Vec<ConversationItem>> {
         if self.table_exists("conversations") {
-            let sql = "
+            let hygiene = session_hygiene_conditions(&self.conn, "conversations");
+            let where_clause = if hygiene.is_empty() {
+                String::new()
+            } else {
+                format!("WHERE {}", hygiene.join(" AND "))
+            };
+
+            let sql = format!("
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(summary, ''), 'Untitled') AS title_clean,
                        project_uri,
@@ -261,10 +280,11 @@ impl SessionDb {
                          ELSE CAST(strftime('%s', updated_at) AS INTEGER)
                        END AS epoch_sec
                 FROM conversations
+                {}
                 ORDER BY epoch_sec DESC
                 LIMIT 200;
-            ";
-            let mut stmt = self.conn.prepare(sql)?;
+            ", where_clause);
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map([], |row| {
                 let id: String = row.get(0)?;
                 let title: String = row.get(1)?;
@@ -288,7 +308,14 @@ impl SessionDb {
             }
             Ok(items)
         } else if self.table_exists("conversation_summaries") {
-            let sql = "
+            let hygiene = session_hygiene_conditions(&self.conn, "conversation_summaries");
+            let where_clause = if hygiene.is_empty() {
+                String::new()
+            } else {
+                format!("WHERE {}", hygiene.join(" AND "))
+            };
+
+            let sql = format!("
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled') AS title_clean,
                        workspace_uris,
@@ -298,10 +325,11 @@ impl SessionDb {
                          ELSE CAST(strftime('%s', last_modified_time) AS INTEGER)
                        END AS epoch_sec
                 FROM conversation_summaries
+                {}
                 ORDER BY epoch_sec DESC
                 LIMIT 200;
-            ";
-            let mut stmt = self.conn.prepare(sql)?;
+            ", where_clause);
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map([], |row| {
                 let id: String = row.get(0)?;
                 let title: String = row.get(1)?;
@@ -328,6 +356,86 @@ impl SessionDb {
             Ok(Vec::new())
         }
     }
+}
+
+/// Check if a specific table exists in the database
+pub fn table_exists(conn: &Connection, table_name: &str) -> bool {
+    let mut stmt = match conn.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1") {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    stmt.exists([table_name]).unwrap_or(false)
+}
+
+/// Check if a specific column exists in a given table
+pub fn table_has_column(conn: &Connection, table_name: &str, column_name: &str) -> bool {
+    let pragma_sql = format!("PRAGMA table_info({})", table_name);
+    let mut stmt = match conn.prepare(&pragma_sql) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+    let mut rows = match stmt.query([]) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+    while let Ok(Some(row)) = rows.next() {
+        if let Ok(col_name) = row.get::<_, String>(1) {
+            if col_name.eq_ignore_ascii_case(column_name) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Generate SQL WHERE conditions enforcing subagent exclusion and filtering abandoned 0-step sessions
+pub fn session_hygiene_conditions(conn: &Connection, table_name: &str) -> Vec<String> {
+    let mut filters = Vec::new();
+
+    let has_parent = table_has_column(conn, table_name, "parent_conversation_id");
+    let has_nesting = table_has_column(conn, table_name, "nesting_depth");
+
+    match (has_parent, has_nesting) {
+        (true, true) => {
+            filters.push(
+                "((parent_conversation_id IS NULL OR parent_conversation_id = '') AND (nesting_depth IS NULL OR nesting_depth = 0))".to_string(),
+            );
+        }
+        (true, false) => {
+            filters.push("(parent_conversation_id IS NULL OR parent_conversation_id = '')".to_string());
+        }
+        (false, true) => {
+            filters.push("(nesting_depth IS NULL OR nesting_depth = 0)".to_string());
+        }
+        (false, false) => {}
+    }
+
+    let has_step_count = table_has_column(conn, table_name, "step_count");
+    let has_title = table_has_column(conn, table_name, "title");
+    let has_preview = table_has_column(conn, table_name, "preview");
+    let has_summary = table_has_column(conn, table_name, "summary");
+
+    let mut non_empty_content = Vec::new();
+    if has_title {
+        non_empty_content.push("(title IS NOT NULL AND title != '')");
+    }
+    if has_preview {
+        non_empty_content.push("(preview IS NOT NULL AND preview != '')");
+    } else if has_summary {
+        non_empty_content.push("(summary IS NOT NULL AND summary != '')");
+    }
+
+    if has_step_count {
+        if !non_empty_content.is_empty() {
+            filters.push(format!("(step_count > 0 OR {})", non_empty_content.join(" OR ")));
+        } else {
+            filters.push("(step_count > 0)".to_string());
+        }
+    } else if !non_empty_content.is_empty() {
+        filters.push(format!("({})", non_empty_content.join(" OR ")));
+    }
+
+    filters
 }
 
 #[cfg(test)]
@@ -487,5 +595,151 @@ mod tests {
             .get_local_conversations(Path::new("/home/user/projects/agymux"))
             .unwrap();
         assert!(local.is_empty());
+    }
+
+    #[test]
+    fn test_subagent_and_abandoned_exclusion_full_schema() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE conversation_summaries (
+                conversation_id TEXT PRIMARY KEY,
+                project_id TEXT,
+                workspace_uris TEXT,
+                title TEXT,
+                preview TEXT,
+                last_modified_time TEXT,
+                parent_conversation_id TEXT,
+                nesting_depth INTEGER,
+                step_count INTEGER
+            )",
+            [],
+        )
+        .unwrap();
+
+        // 1. Valid root conversation
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('root-1', 'proj', '[\"file:///home/user/projects/proj\"]', 'Root task', 'Doing work', '2026-10-13 10:00:00', '', 0, 10)",
+            [],
+        )
+        .unwrap();
+
+        // 2. Subagent with parent_conversation_id set (should be excluded)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('sub-1', 'proj', '[\"file:///home/user/projects/proj\"]', 'Subagent task', 'Subagent preview', '2026-10-13 10:05:00', 'root-1', 1, 5)",
+            [],
+        )
+        .unwrap();
+
+        // 3. Subagent with empty parent but nesting_depth > 0 (should be excluded)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('sub-2', 'proj', '[\"file:///home/user/projects/proj\"]', 'Deep agent', 'Subagent preview 2', '2026-10-13 10:06:00', '', 2, 8)",
+            [],
+        )
+        .unwrap();
+
+        // 4. Abandoned session: 0 steps, empty title, empty preview (should be excluded)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('abandoned-1', 'proj', '[\"file:///home/user/projects/proj\"]', '', '', '2026-10-13 10:07:00', '', 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        // 5. Fresh active session: 0 steps but non-empty title (should be included)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('fresh-1', 'proj', '[\"file:///home/user/projects/proj\"]', 'Initial prompt title', '', '2026-10-13 10:08:00', '', 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        // 6. Fresh active session: 0 steps but non-empty preview (should be included)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('fresh-2', 'proj', '[\"file:///home/user/projects/proj\"]', '', 'Initial prompt in preview', '2026-10-13 10:09:00', '', 0, 0)",
+            [],
+        )
+        .unwrap();
+
+        // 7. Root session with NULL parent_conversation_id and NULL nesting_depth (should be included)
+        conn.execute(
+            "INSERT INTO conversation_summaries (conversation_id, project_id, workspace_uris, title, preview, last_modified_time, parent_conversation_id, nesting_depth, step_count)
+             VALUES ('null-parent', 'proj', '[\"file:///home/user/projects/proj\"]', 'Null parent task', 'preview', '2026-10-13 10:10:00', NULL, NULL, 3)",
+            [],
+        )
+        .unwrap();
+
+        let db = SessionDb::from_connection(conn);
+        let global = db.get_global_conversations().unwrap();
+
+        let returned_ids: Vec<String> = global.into_iter().map(|item| item.id).collect();
+        assert!(returned_ids.contains(&"root-1".to_string()));
+        assert!(returned_ids.contains(&"fresh-1".to_string()));
+        assert!(returned_ids.contains(&"fresh-2".to_string()));
+        assert!(returned_ids.contains(&"null-parent".to_string()));
+
+        // Crucial assertions: subagents and abandoned sessions are excluded
+        assert!(!returned_ids.contains(&"sub-1".to_string()), "sub-1 with parent_conversation_id must be excluded");
+        assert!(!returned_ids.contains(&"sub-2".to_string()), "sub-2 with nesting_depth > 0 must be excluded");
+        assert!(!returned_ids.contains(&"abandoned-1".to_string()), "abandoned-1 with 0 steps and empty title/preview must be excluded");
+
+        let local = db
+            .get_local_conversations(Path::new("/home/user/projects/proj"))
+            .unwrap();
+        let local_ids: Vec<String> = local.into_iter().map(|item| item.id).collect();
+        assert!(local_ids.contains(&"root-1".to_string()));
+        assert!(local_ids.contains(&"fresh-1".to_string()));
+        assert!(local_ids.contains(&"fresh-2".to_string()));
+        assert!(local_ids.contains(&"null-parent".to_string()));
+        assert!(!local_ids.contains(&"sub-1".to_string()));
+        assert!(!local_ids.contains(&"sub-2".to_string()));
+        assert!(!local_ids.contains(&"abandoned-1".to_string()));
+    }
+
+    #[test]
+    fn test_subagent_exclusion_in_conversations_table_with_parent_col() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE conversations (
+                conversation_id TEXT PRIMARY KEY,
+                project_id TEXT,
+                project_uri TEXT,
+                title TEXT,
+                summary TEXT,
+                updated_at INTEGER,
+                parent_conversation_id TEXT
+            )",
+            [],
+        )
+        .unwrap();
+
+        let now = chrono::Utc::now().timestamp();
+        conn.execute(
+            "INSERT INTO conversations (conversation_id, project_id, project_uri, title, summary, updated_at, parent_conversation_id)
+             VALUES ('conv-root', 'proj', 'file:///home/user/projects/proj', 'Root task', 'summary', ?1, '')",
+            [now - 10],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO conversations (conversation_id, project_id, project_uri, title, summary, updated_at, parent_conversation_id)
+             VALUES ('conv-sub', 'proj', 'file:///home/user/projects/proj', 'Subagent task', 'summary', ?1, 'conv-root')",
+            [now - 5],
+        )
+        .unwrap();
+
+        let db = SessionDb::from_connection(conn);
+        let global = db.get_global_conversations().unwrap();
+        let global_ids: Vec<String> = global.into_iter().map(|item| item.id).collect();
+        assert_eq!(global_ids, vec!["conv-root"]);
+
+        let local = db
+            .get_local_conversations(Path::new("/home/user/projects/proj"))
+            .unwrap();
+        let local_ids: Vec<String> = local.into_iter().map(|item| item.id).collect();
+        assert_eq!(local_ids, vec!["conv-root"]);
     }
 }

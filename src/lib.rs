@@ -243,9 +243,19 @@ fn handle_attach(
                 let db = db_path();
                 if db.exists() {
                     rusqlite::Connection::open(&db).ok().and_then(|conn| {
+                        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+                        let hygiene_and = if hygiene.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" AND {}", hygiene.join(" AND "))
+                        };
                         let pattern = format!("%{}%", project);
+                        let sql = format!(
+                            "SELECT title, strftime('%s', last_modified_time) FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
+                            hygiene_and
+                        );
                         conn.query_row(
-                            "SELECT title, strftime('%s', last_modified_time) FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                            &sql,
                             rusqlite::params![pattern, project],
                             |r| {
                                 let title: String = r.get(0)?;
@@ -304,14 +314,35 @@ fn handle_attach(
                 let db = db_path();
                 if db.exists() {
                     rusqlite::Connection::open(&db).ok().and_then(|conn| {
+                        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+                        let hygiene_and = if hygiene.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" AND {}", hygiene.join(" AND "))
+                        };
+                        let hygiene_where = if hygiene.is_empty() {
+                            String::new()
+                        } else {
+                            format!("WHERE {}", hygiene.join(" AND "))
+                        };
+
                         let pattern = format!("%{}%", project);
+                        let sql_project = format!(
+                            "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
+                            hygiene_and
+                        );
+                        let sql_global = format!(
+                            "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
+                            hygiene_where
+                        );
+
                         conn.query_row(
-                            "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                            &sql_project,
                             rusqlite::params![pattern, project],
                             |r| r.get::<_, String>(0),
                         ).or_else(|_| {
                             conn.query_row(
-                                "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                                &sql_global,
                                 [],
                                 |r| r.get::<_, String>(0),
                             )
@@ -410,13 +441,21 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
     }
 
     if let Ok(conn) = rusqlite::Connection::open(&db) {
+        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+        let hygiene_and = if hygiene.is_empty() {
+            String::new()
+        } else {
+            format!(" AND {}", hygiene.join(" AND "))
+        };
         let pattern = format!("%{}%", project);
-        let mut stmt = match conn.prepare(
+        let sql = format!(
             "SELECT conversation_id, title FROM conversation_summaries 
              WHERE (workspace_uris LIKE ?1 OR project_id = ?2) 
-               AND title IS NOT NULL AND title != '' 
+               AND title IS NOT NULL AND title != ''{} 
              ORDER BY last_modified_time DESC LIMIT 10",
-        ) {
+            hygiene_and
+        );
+        let mut stmt = match conn.prepare(&sql) {
             Ok(s) => s,
             Err(_) => return Ok(()),
         };
@@ -554,14 +593,33 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
             rusqlite::Connection::open(&db)
                 .ok()
                 .and_then(|conn| {
+                    let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+                    let hygiene_and = if hygiene.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" AND {}", hygiene.join(" AND "))
+                    };
+                    let hygiene_where = if hygiene.is_empty() {
+                        String::new()
+                    } else {
+                        format!("WHERE {}", hygiene.join(" AND "))
+                    };
                     let pattern = format!("%{}%", project);
+                    let sql_project = format!(
+                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
+                        hygiene_and
+                    );
+                    let sql_global = format!(
+                        "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
+                        hygiene_where
+                    );
                     conn.query_row(
-                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2) ORDER BY last_modified_time DESC LIMIT 1",
+                        &sql_project,
                         rusqlite::params![pattern, project],
                         |r| r.get::<_, String>(0),
                     ).or_else(|_| {
                         conn.query_row(
-                            "SELECT conversation_id FROM conversation_summaries ORDER BY last_modified_time DESC LIMIT 1",
+                            &sql_global,
                             [],
                             |r| r.get::<_, String>(0),
                         )
@@ -720,17 +778,23 @@ fn run_watcher(
         }
 
         if let Ok(conn) = rusqlite::Connection::open(&db) {
-            let sql = "
+            let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+            let hygiene_and = if hygiene.is_empty() {
+                String::new()
+            } else {
+                format!(" AND {}", hygiene.join(" AND "))
+            };
+            let sql = format!("
                 SELECT conversation_id, title 
                 FROM conversation_summaries 
                 WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
                   AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
                   AND (?4 IS NULL OR conversation_id != ?4)
-                  AND title IS NOT NULL AND title != ''
+                  AND title IS NOT NULL AND title != ''{}
                 ORDER BY last_modified_time DESC 
                 LIMIT 1;
-            ";
-            if let Ok(mut stmt) = conn.prepare(sql) {
+            ", hygiene_and);
+            if let Ok(mut stmt) = conn.prepare(&sql) {
                 if let Ok((cid, title)) = stmt.query_row(
                     rusqlite::params![pattern, proj, start_time, exclude_id],
                     |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),

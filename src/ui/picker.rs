@@ -781,32 +781,57 @@ fn load_historical_conversations(
     }
 
     if let Ok(conn) = Connection::open(&db_path) {
+        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+        let hygiene_and = if hygiene.is_empty() {
+            String::new()
+        } else {
+            format!(" AND {}", hygiene.join(" AND "))
+        };
+        let hygiene_where = if hygiene.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", hygiene.join(" AND "))
+        };
+
+        let step_count_col = if crate::core::session::table_has_column(&conn, "conversation_summaries", "step_count") {
+            "step_count"
+        } else {
+            "0 AS step_count"
+        };
+
         let sql = match scope {
             ScopeArg::Global => {
-                "SELECT conversation_id,
-                        COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
-                        strftime('%m-%d %H:%M', last_modified_time),
-                        COALESCE(NULLIF(project_id, ''), 'main'),
-                        step_count
-                 FROM conversation_summaries
-                 ORDER BY last_modified_time DESC
-                 LIMIT ?;"
+                format!(
+                    "SELECT conversation_id,
+                            COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
+                            strftime('%m-%d %H:%M', last_modified_time),
+                            COALESCE(NULLIF(project_id, ''), 'main'),
+                            {}
+                     FROM conversation_summaries
+                     {}
+                     ORDER BY last_modified_time DESC
+                     LIMIT ?;",
+                    step_count_col, hygiene_where
+                )
             }
             ScopeArg::Local => {
-                "SELECT conversation_id,
-                        COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
-                        strftime('%m-%d %H:%M', last_modified_time),
-                        COALESCE(NULLIF(project_id, ''), 'main'),
-                        step_count
-                 FROM conversation_summaries
-                 WHERE workspace_uris LIKE ? OR project_id = ? OR ? = ''
-                 ORDER BY last_modified_time DESC
-                 LIMIT ?;"
+                format!(
+                    "SELECT conversation_id,
+                            COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
+                            strftime('%m-%d %H:%M', last_modified_time),
+                            COALESCE(NULLIF(project_id, ''), 'main'),
+                            {}
+                     FROM conversation_summaries
+                     WHERE (workspace_uris LIKE ? OR project_id = ? OR ? = ''){hygiene_and}
+                     ORDER BY last_modified_time DESC
+                     LIMIT ?;",
+                    step_count_col
+                )
             }
         };
 
         if scope == ScopeArg::Global {
-            if let Ok(mut stmt) = conn.prepare(sql) {
+            if let Ok(mut stmt) = conn.prepare(&sql) {
                 let rows = stmt.query_map([limit as i64], |row| {
                     Ok(ItemKind::Historical {
                         conversation_id: row.get(0)?,
@@ -828,7 +853,7 @@ fn load_historical_conversations(
             }
         } else {
             let filter = format!("%{}%", project);
-            if let Ok(mut stmt) = conn.prepare(sql) {
+            if let Ok(mut stmt) = conn.prepare(&sql) {
                 let rows = stmt.query_map(
                     rusqlite::params![filter, project, project, limit as i64],
                     |row| {
