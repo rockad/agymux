@@ -50,28 +50,28 @@ impl TmuxProfile {
             .theme
             .status_left
             .as_deref()
-            .unwrap_or("#{?client_prefix,#[reverse]#[bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }");
+            .unwrap_or("#{?client_prefix,#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,#[fg=black]#[bg=magenta]#[bold] #S #[default] }");
         lines.push(format!("set -g status-left \"{}\"", status_left));
 
         lines.push("setw -g window-status-separator \" \"".to_string());
 
-        // Window status format: clean default terminal text
+        // Window status format: clean default terminal text with muted index/title
         let window_format = config
             .theme
             .window_status_format
             .as_deref()
-            .unwrap_or(" #I #W ");
+            .unwrap_or("#[fg=brightblack,bg=default] #I #W #[default]");
         lines.push(format!(
             "setw -g window-status-format \"{}\"",
             window_format
         ));
 
-        // Active window format: clean terminal reverse highlight
+        // Active window format: highlighted active tab using terminal green
         let active_window_format = config
             .theme
             .window_status_current_format
             .as_deref()
-            .unwrap_or("#[reverse,bold] #I #W #[default]");
+            .unwrap_or("#[fg=black]#[bg=green]#[bold] #I #W #[default]");
         lines.push(format!(
             "setw -g window-status-current-format \"{}\"",
             active_window_format
@@ -82,7 +82,7 @@ impl TmuxProfile {
             .theme
             .status_right
             .as_deref()
-            .unwrap_or("%H:%M agymux ");
+            .unwrap_or("#[fg=brightblack]%H:%M #[fg=cyan,bold]agymux #[default]");
         lines.push(format!("set -g status-right \"{}\"", status_right));
 
         // Prefix key
@@ -203,9 +203,9 @@ mod tests {
         assert!(!content.contains(''));
         assert!(!content.contains(''));
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \" #I #W \""));
+        assert!(content.contains("setw -g window-status-format \"#[fg=brightblack,bg=default] #I #W #[default]\""));
         assert!(content
-            .contains("setw -g window-status-current-format \"#[reverse,bold] #I #W #[default]\""));
+            .contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-position top"));
         assert!(content.contains("set -g prefix C-Space"));
         assert!(content
@@ -241,8 +241,9 @@ mod tests {
         let content = TmuxProfile::render_content(&config);
 
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \" #I #W \""));
-        assert!(content.contains("setw -g window-status-current-format \"#[reverse,bold] #I #W #[default]\""));
+        assert!(content.contains("setw -g window-status-format \"#[fg=brightblack,bg=default] #I #W #[default]\""));
+        assert!(content.contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
+        assert!(content.contains("set -g status-left \"#{?client_prefix,#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,#[fg=black]#[bg=magenta]#[bold] #S #[default] }\""));
     }
 
     #[test]
