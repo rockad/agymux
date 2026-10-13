@@ -50,7 +50,7 @@ impl TmuxProfile {
             .theme
             .status_left
             .as_deref()
-            .unwrap_or("#{?client_prefix,#[reverse,bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }");
+            .unwrap_or("#{?client_prefix,#[reverse]#[bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }");
         lines.push(format!("set -g status-left \"{}\"", status_left));
 
         lines.push("setw -g window-status-separator \" \"".to_string());
