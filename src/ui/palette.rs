@@ -620,7 +620,7 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                 } else {
                     ""
                 };
-                let reload_cmd = format!("agymux run --project '{}' -c '{}'{}", proj, cid, rc_flag);
+                let reload_cmd = format!("agymux run --project '{}' --conversation '{}'{}", proj, cid, rc_flag);
 
                 if std::env::var("TMUX").is_ok() {
                     let _ = Command::new("tmux")
@@ -633,7 +633,7 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                 } else {
                     println!("Reloading session: {}", cid);
                     let mut cmd = Command::new("agy");
-                    cmd.args(["--project", proj, "-c", &cid]);
+                    cmd.args(["--project", proj, "--conversation", &cid]);
                     if config.general.remote_control {
                         cmd.arg("--remote-control");
                     }

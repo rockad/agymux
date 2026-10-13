@@ -1066,7 +1066,7 @@ pub fn execute_selection(
                 let session_name = format!("agy-{}", effective_project);
                 let config = crate::config::Config::load().unwrap_or_default();
                 let mut run_cmd = format!(
-                    "agymux run --project '{}' -c '{}'",
+                    "agymux run --project '{}' --conversation '{}'",
                     effective_project, conversation_id
                 );
                 if config.general.remote_control {

@@ -350,7 +350,7 @@ fn handle_attach(
             };
 
             let mut run_cmd = if let Some(ref lid) = latest_id {
-                format!("agymux run --project '{}' -c '{}'", project, lid)
+                format!("agymux run --project '{}' --conversation '{}'", project, lid)
             } else {
                 format!("agymux run --project '{}'", project)
             };
@@ -597,6 +597,62 @@ pub fn sanitize_title(raw: &str) -> String {
     }
 }
 
+/// Build arguments forwarded to agy.
+/// Ensures project is not duplicated, -c vs --conversation semantics are respected
+/// (agy takes --conversation <id> for specific conversations, and boolean -c for latest),
+/// and --remote-control is forwarded appropriately.
+pub fn build_agy_args(
+    project: &str,
+    args: &[String],
+    conv_id: Option<&str>,
+    has_continue_flag: bool,
+    remote_control: bool,
+) -> Vec<String> {
+    let mut forward_args = vec!["--project".to_string(), project.to_string()];
+    let mut i = 0;
+    let mut has_remote_control = false;
+
+    while i < args.len() {
+        let a = &args[i];
+        if a == "--project" || a == "-p" {
+            i += 1;
+            if i < args.len() && !args[i].starts_with('-') {
+                i += 1;
+            }
+            continue;
+        }
+        if a == "--remote-control" {
+            has_remote_control = true;
+            forward_args.push(a.clone());
+            i += 1;
+            continue;
+        }
+        if a == "-c" || a == "--conversation" || a == "--continue" {
+            if i + 1 < args.len() && !args[i + 1].starts_with('-') {
+                i += 2;
+            } else {
+                i += 1;
+            }
+            continue;
+        }
+        forward_args.push(a.clone());
+        i += 1;
+    }
+
+    if let Some(cid) = conv_id {
+        forward_args.push("--conversation".to_string());
+        forward_args.push(cid.to_string());
+    } else if has_continue_flag {
+        forward_args.push("-c".to_string());
+    }
+
+    if remote_control && !has_remote_control {
+        forward_args.push("--remote-control".to_string());
+    }
+
+    forward_args
+}
+
 /// Internal process runner with instant prompt-based window naming and title watcher
 fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<()> {
     let in_tmux = std::env::var("TMUX").is_ok();
@@ -607,11 +663,18 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
     // Check args for conversation id and prompt
     let mut iter = args.iter().peekable();
     while let Some(arg) = iter.next() {
-        if arg == "--conversation" || arg == "-c" {
+        if arg == "--project" || arg == "-p" {
+            if let Some(next) = iter.peek() {
+                if !next.starts_with('-') {
+                    let _ = iter.next();
+                }
+            }
+        } else if arg == "--conversation" || arg == "-c" || arg == "--continue" {
             has_continue_flag = true;
             if let Some(next) = iter.peek() {
                 if !next.starts_with('-') {
                     conv_id = Some(next.to_string());
+                    let _ = iter.next();
                 }
             }
         } else if !arg.starts_with('-') && initial_prompt.is_none() {
@@ -706,51 +769,14 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
 
     // 3. Assemble and execute agy
     let mut cmd = Command::new("agy");
-    cmd.args(["--project", project]);
-
-    // Build args forwarding, ensuring -c <resolved_id> and --remote-control are passed appropriately
-    let mut forward_args = Vec::new();
-    let mut i = 0;
-    let mut injected_cid = false;
-    let mut has_remote_control = false;
-    while i < args.len() {
-        let a = &args[i];
-        if a == "--remote-control" {
-            has_remote_control = true;
-            forward_args.push(a.clone());
-            i += 1;
-            continue;
-        }
-        if a == "-c" || a == "--conversation" {
-            forward_args.push(a.clone());
-            if i + 1 < args.len() && !args[i + 1].starts_with('-') {
-                forward_args.push(args[i + 1].clone());
-                i += 2;
-                injected_cid = true;
-                continue;
-            } else if let Some(ref cid) = conv_id {
-                forward_args.push(cid.clone());
-                injected_cid = true;
-                i += 1;
-                continue;
-            }
-        }
-        forward_args.push(a.clone());
-        i += 1;
-    }
-    if has_continue_flag && !injected_cid {
-        if let Some(ref cid) = conv_id {
-            forward_args.push("-c".to_string());
-            forward_args.push(cid.clone());
-        }
-    }
-    if remote_control && !has_remote_control {
-        forward_args.push("--remote-control".to_string());
-    }
-
-    if !forward_args.is_empty() {
-        cmd.args(&forward_args);
-    }
+    let forward_args = build_agy_args(
+        project,
+        &args,
+        conv_id.as_deref(),
+        has_continue_flag,
+        remote_control,
+    );
+    cmd.args(&forward_args);
 
     #[cfg(unix)]
     {
@@ -1089,4 +1115,72 @@ fn run_ls() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_agy_args_with_conv_id() {
+        let args = vec!["--project".to_string(), "doppelganger".to_string(), "-c".to_string(), "conv-uuid-1".to_string()];
+        let res = build_agy_args("doppelganger", &args, Some("conv-uuid-1"), true, false);
+        assert_eq!(
+            res,
+            vec!["--project", "doppelganger", "--conversation", "conv-uuid-1"]
+        );
+    }
+
+    #[test]
+    fn test_build_agy_args_bare_continue_resolved() {
+        let args = vec!["-c".to_string()];
+        let res = build_agy_args("doppelganger", &args, Some("conv-uuid-latest"), true, false);
+        assert_eq!(
+            res,
+            vec!["--project", "doppelganger", "--conversation", "conv-uuid-latest"]
+        );
+    }
+
+    #[test]
+    fn test_build_agy_args_bare_continue_unresolved() {
+        let args = vec!["-c".to_string()];
+        let res = build_agy_args("doppelganger", &args, None, true, false);
+        assert_eq!(
+            res,
+            vec!["--project", "doppelganger", "-c"]
+        );
+    }
+
+    #[test]
+    fn test_build_agy_args_new_session_no_flags() {
+        let args: Vec<String> = vec![];
+        let res = build_agy_args("doppelganger", &args, None, false, false);
+        assert_eq!(
+            res,
+            vec!["--project", "doppelganger"]
+        );
+    }
+
+    #[test]
+    fn test_build_agy_args_preserves_custom_flags_and_remote_control() {
+        let args = vec![
+            "--model".to_string(),
+            "gemini-3.8-flash".to_string(),
+            "--conversation".to_string(),
+            "conv-uuid-2".to_string(),
+        ];
+        let res = build_agy_args("doppelganger", &args, Some("conv-uuid-2"), true, true);
+        assert_eq!(
+            res,
+            vec![
+                "--project",
+                "doppelganger",
+                "--model",
+                "gemini-3.8-flash",
+                "--conversation",
+                "conv-uuid-2",
+                "--remote-control",
+            ]
+        );
+    }
 }
