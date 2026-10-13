@@ -7,7 +7,7 @@ proptest! {
     #[test]
     fn test_fuzz_sanitize_title(s in ".*") {
         let sanitized = sanitize_title(&s);
-        prop_assert!(sanitized.chars().count() <= 20);
+        prop_assert!(sanitized.chars().count() <= 30);
         prop_assert!(!sanitized.is_empty());
         for c in sanitized.chars() {
             prop_assert!(c.is_alphanumeric() || c == ' ' || c == '_' || c == '-' || c == '.');

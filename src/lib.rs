@@ -389,6 +389,33 @@ fn handle_attach(
     Ok(())
 }
 
+/// Collect all non-empty @conversation_id values currently bound to tmux windows.
+/// If `session_name` is Some, queries only windows in that session; otherwise queries all windows across all sessions.
+pub fn get_bound_conversation_ids(session_name: Option<&str>) -> std::collections::HashSet<String> {
+    let mut bound = std::collections::HashSet::new();
+    let mut cmd = Command::new("tmux");
+    cmd.arg("list-windows");
+    if let Some(sess) = session_name {
+        cmd.args(["-t", sess]);
+    } else {
+        cmd.arg("-a");
+    }
+    cmd.args(["-F", "#{@conversation_id}"]);
+
+    if let Ok(output) = cmd.output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    bound.insert(trimmed.to_string());
+                }
+            }
+        }
+    }
+    bound
+}
+
 /// Heal any window with title "+ new" or "agy" where @conversation_id is empty by checking SQLite
 pub fn heal_unbound_windows(project: &str) -> Result<()> {
     if std::env::var("TMUX").is_err() {
@@ -559,7 +586,13 @@ pub fn sanitize_title(raw: &str) -> String {
     if trimmed.is_empty() {
         "agy".to_string()
     } else {
-        trimmed.chars().take(20).collect()
+        let truncated: String = trimmed.chars().take(30).collect();
+        let res = truncated.trim_end().to_string();
+        if res.is_empty() {
+            "agy".to_string()
+        } else {
+            res
+        }
     }
 }
 
@@ -781,19 +814,42 @@ fn run_watcher(
                 } else {
                     format!(" AND {}", hygiene.join(" AND "))
                 };
+
+                // Exclude any conversation ID already bound to a window in tmux
+                let mut bound_ids = get_bound_conversation_ids(None);
+                if let Some(ex) = exclude_id {
+                    bound_ids.insert(ex.to_string());
+                }
+
+                let bound_clause = if bound_ids.is_empty() {
+                    String::new()
+                } else {
+                    let placeholders: Vec<String> = (0..bound_ids.len()).map(|i| format!("?{}", i + 4)).collect();
+                    format!(" AND conversation_id NOT IN ({})", placeholders.join(","))
+                };
+
                 let sql = format!("
                     SELECT conversation_id, title 
                     FROM conversation_summaries 
                     WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
                       AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
-                      AND (?4 IS NULL OR conversation_id != ?4)
-                      AND title IS NOT NULL AND title != ''{}
+                      AND title IS NOT NULL AND title != ''{}{bound_clause}
                     ORDER BY last_modified_time DESC 
                     LIMIT 1;
                 ", hygiene_and);
+
                 if let Ok(mut stmt) = conn.prepare(&sql) {
+                    let mut params: Vec<rusqlite::types::Value> = vec![
+                        pattern.clone().into(),
+                        proj.clone().into(),
+                        start_time.to_string().into(),
+                    ];
+                    for id in bound_ids {
+                        params.push(id.into());
+                    }
+
                     if let Ok((cid, title)) = stmt.query_row(
-                        rusqlite::params![pattern, proj, start_time, exclude_id],
+                        rusqlite::params_from_iter(params.iter()),
                         |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
                     ) {
                         let _ = Command::new("tmux")
