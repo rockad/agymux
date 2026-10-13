@@ -48,11 +48,9 @@ impl TmuxProfile {
         lines.push("set -g status-right-length 70".to_string());
 
         // Status Left: inherit terminal colors unless explicitly overridden (dynamic prefix indicator)
-        let status_left = config
-            .theme
-            .status_left
-            .as_deref()
-            .unwrap_or("#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}");
+        let status_left = config.theme.status_left.as_deref().unwrap_or(
+            "#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}",
+        );
         lines.push(format!("set -g status-left \"{}\"", status_left));
 
         lines.push("setw -g window-status-separator \" \"".to_string());
@@ -235,7 +233,9 @@ mod tests {
         let content = TmuxProfile::render_content(&config);
 
         assert!(content.contains("set -g status-style \"bg=black,fg=white\""));
-        assert!(content.contains("setw -g window-status-current-format \"#[bold,fg=green] #I #W #[default]\""));
+        assert!(content.contains(
+            "setw -g window-status-current-format \"#[bold,fg=green] #I #W #[default]\""
+        ));
     }
 
     #[test]
