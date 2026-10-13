@@ -130,6 +130,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Ctrl+Space d  /  в",
         "Detach tmux session (leaves agents running)",
     ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space Q  /  Й",
+        "Kill session completely (terminates all tabs)",
+    ));
     text_lines.push(Line::raw(""));
 
     // Section 3: Modals & Global Controls

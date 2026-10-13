@@ -79,6 +79,7 @@ pub fn run() -> Result<()> {
                     "helper" => ui::palette::PaletteAction::Shortcuts,
                     "detach" => ui::palette::PaletteAction::Detach,
                     "quit" => ui::palette::PaletteAction::QuitKeepTabs,
+                    "kill" | "kill-session" | "terminate" => ui::palette::PaletteAction::KillSession,
                     "bind" => ui::palette::PaletteAction::BindConversation,
                     "term" | "terminal" => ui::palette::PaletteAction::NewTerminalTab,
                     "main" => ui::palette::PaletteAction::SwitchToMain,

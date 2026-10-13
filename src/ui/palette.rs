@@ -26,6 +26,7 @@ pub enum PaletteAction {
     Shortcuts,
     Detach,
     QuitKeepTabs,
+    KillSession,
     BindConversation,
     NewTerminalTab,
     SwitchToMain,
@@ -116,6 +117,12 @@ impl PaletteItem {
                 shortcut: "Ctrl+Space q / й",
             },
             PaletteItem {
+                action: PaletteAction::KillSession,
+                icon: "🛑",
+                title: "Kill Session (Exit Completely)",
+                shortcut: "Ctrl+Space Q / Й",
+            },
+            PaletteItem {
                 action: PaletteAction::BindConversation,
                 icon: "🔗",
                 title: "Bind Conversation to Tab",
@@ -181,6 +188,9 @@ impl PaletteState {
                 match item.action {
                     PaletteAction::QuitKeepTabs => {
                         "quit".contains(&q) || "exit".contains(&q) || q == "q" || q == "й"
+                    }
+                    PaletteAction::KillSession => {
+                        "kill".contains(&q) || "terminate".contains(&q) || "stop".contains(&q) || q == "q" || q == "й"
                     }
                     PaletteAction::Detach => "detach".contains(&q),
                     PaletteAction::BindConversation => {
@@ -514,6 +524,46 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
         }
         PaletteAction::QuitKeepTabs => {
             let _ = Command::new("tmux").arg("detach-client").status();
+        }
+        PaletteAction::KillSession => {
+            // Collect all pane PIDs across windows in the current session
+            let mut pids = Vec::new();
+            if let Ok(output) = Command::new("tmux")
+                .args(["list-panes", "-s", "-F", "#{pane_pid}"])
+                .output()
+            {
+                if output.status.success() {
+                    let out_str = String::from_utf8_lossy(&output.stdout);
+                    for line in out_str.lines() {
+                        if let Ok(pid) = line.trim().parse::<i32>() {
+                            if pid > 1 {
+                                pids.push(pid);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Terminate child processes and their process groups (SIGTERM then SIGKILL)
+            for &pid in &pids {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(-pid, libc::SIGTERM);
+                    libc::kill(pid, libc::SIGTERM);
+                }
+            }
+
+            std::thread::sleep(std::time::Duration::from_millis(150));
+
+            for &pid in &pids {
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(-pid, libc::SIGKILL);
+                    libc::kill(pid, libc::SIGKILL);
+                }
+            }
+
+            let _ = Command::new("tmux").arg("kill-session").status();
         }
         PaletteAction::BindConversation => {
             let _ = Command::new("tmux")

@@ -62,7 +62,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 15);
+    assert_eq!(state.items.len(), 16);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -113,6 +113,16 @@ fn test_palette_modal_render_and_fuzzy_filter() {
         );
     }
     assert_eq!(state.selected_action(), Some(PaletteAction::QuitKeepTabs));
+
+    // Test query for "kill" / "terminate" finds KillSession
+    state.query.clear();
+    for c in "kill".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::KillSession));
 
     // Test query for "bind" finds BindConversation
     state.query.clear();

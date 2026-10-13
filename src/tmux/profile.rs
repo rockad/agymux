@@ -116,6 +116,7 @@ impl TmuxProfile {
         lines.push("bind d detach-client".to_string());
         lines.push("bind r refresh-client".to_string());
         lines.push("bind q detach-client".to_string());
+        lines.push("bind Q kill-session".to_string());
         lines.push("bind b display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
         lines.push("bind t new-window -n \"term\" \"$SHELL\"".to_string());
         lines.push("bind R run-shell \"agymux palette -a reload\"".to_string());
@@ -145,6 +146,7 @@ impl TmuxProfile {
             lines.push("bind к refresh-client".to_string());
             lines.push("bind К run-shell \"agymux palette -a reload\"".to_string());
             lines.push("bind й detach-client".to_string());
+            lines.push("bind Й kill-session".to_string());
             lines.push("bind и display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
             lines.push("bind е new-window -n \"term\" \"$SHELL\"".to_string());
             lines.push(
@@ -214,6 +216,7 @@ mod tests {
         assert!(content
             .contains("bind c new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\""));
         assert!(content.contains("bind q detach-client"));
+        assert!(content.contains("bind Q kill-session"));
         assert!(content.contains("bind b display-popup -E -w 75% -h 60% \"agymux bind\""));
         assert!(content.contains("bind t new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
@@ -221,6 +224,7 @@ mod tests {
         assert!(content.contains("bind с new-window"));
         assert!(content.contains("bind ы display-popup"));
         assert!(content.contains("bind й detach-client"));
+        assert!(content.contains("bind Й kill-session"));
         assert!(content.contains("bind и display-popup -E -w 75% -h 60% \"agymux bind\""));
         assert!(content.contains("bind е new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
