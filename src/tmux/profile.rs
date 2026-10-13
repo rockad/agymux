@@ -43,14 +43,14 @@ impl TmuxProfile {
             .unwrap_or("bg=default,fg=default");
         lines.push(format!("set -g status-style \"{}\"", status_style));
         lines.push("set -g status-left-length 40".to_string());
-        lines.push("set -g status-right-length 60".to_string());
+        lines.push("set -g status-right-length 70".to_string());
 
-        // Status Left: inherit terminal colors unless explicitly overridden (persistent session name with dynamic prefix pill)
+        // Status Left: inherit terminal colors unless explicitly overridden (dynamic prefix indicator)
         let status_left = config
             .theme
             .status_left
             .as_deref()
-            .unwrap_or("#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}#[fg=magenta] #S #[default] #[fg=brightblack]|#[default] ");
+            .unwrap_or("#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}");
         lines.push(format!("set -g status-left \"{}\"", status_left));
 
         lines.push("setw -g window-status-separator \" \"".to_string());
@@ -77,12 +77,12 @@ impl TmuxProfile {
             active_window_format
         ));
 
-        // Status Right: Model info & time (inherits terminal colors)
+        // Status Right: Model info & project · time · date (inherits terminal colors)
         let status_right = config
             .theme
             .status_right
             .as_deref()
-            .unwrap_or("#[fg=brightblack]%H:%M #[fg=cyan,bold]agymux #[default]");
+            .unwrap_or("#{?#{@agy_running},#[fg=yellow,bold]● RUNNING  ,}#[fg=magenta]#S #[fg=brightblack]· #[fg=brightblack]%H:%M #[fg=brightblack]· #[fg=brightblack]%Y-%m-%d #[default]");
         lines.push(format!("set -g status-right \"{}\"", status_right));
 
         // Prefix key
@@ -206,7 +206,7 @@ mod tests {
         assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
         assert!(content
             .contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
-        assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}#[fg=magenta] #S #[default] #[fg=brightblack]|#[default] \""));
+        assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
         assert!(content.contains("set -g status-position top"));
         assert!(content.contains("set -g prefix C-Space"));
         assert!(content
@@ -244,7 +244,7 @@ mod tests {
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
         assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
         assert!(content.contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
-        assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}#[fg=magenta] #S #[default] #[fg=brightblack]|#[default] \""));
+        assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
     }
 
     #[test]
