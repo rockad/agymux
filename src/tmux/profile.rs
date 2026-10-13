@@ -55,12 +55,12 @@ impl TmuxProfile {
 
         lines.push("setw -g window-status-separator \" \"".to_string());
 
-        // Window status format: inactive tab with distinct dark background, and highlighted alert on action/response required
+        // Window status format: inactive tab with distinctive white text on black, and highlighted alert on action/response required
         let window_format = config
             .theme
             .window_status_format
             .as_deref()
-            .unwrap_or("#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}");
+            .unwrap_or("#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}");
         lines.push(format!(
             "setw -g window-status-format \"{}\"",
             window_format
@@ -77,12 +77,12 @@ impl TmuxProfile {
             active_window_format
         ));
 
-        // Status Right: Model info & project · time · date (inherits terminal colors)
+        // Status Right: Model info & project · time · date (distinctive text colors)
         let status_right = config
             .theme
             .status_right
             .as_deref()
-            .unwrap_or("#{?#{@agy_running},#[fg=yellow,bold]● RUNNING  ,}#[fg=magenta]#S #[fg=brightblack]· #[fg=brightblack]%H:%M #[fg=brightblack]· #[fg=brightblack]%Y-%m-%d #[default]");
+            .unwrap_or("#{?#{@agy_running},#[fg=yellow,bold]● RUNNING  ,}#[fg=magenta]#S #[fg=white]· #[fg=white]%H:%M #[fg=white]· #[fg=white]%Y-%m-%d #[default]");
         lines.push(format!("set -g status-right \"{}\"", status_right));
 
         // Prefix key
@@ -203,7 +203,7 @@ mod tests {
         assert!(!content.contains(''));
         assert!(!content.contains(''));
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
+        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}\""));
         assert!(content
             .contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
@@ -242,7 +242,7 @@ mod tests {
         let content = TmuxProfile::render_content(&config);
 
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
+        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}\""));
         assert!(content.contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
     }
