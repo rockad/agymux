@@ -34,6 +34,8 @@ impl TmuxProfile {
 
         // Status bar layout (inherits terminal background and foreground by default)
         lines.push(format!("set -g status-position {}", position));
+        lines.push("set -g status 2".to_string());
+        lines.push("set -g \"status-format[1]\" \"#[bg=default,fill= ] \"".to_string());
         lines.push("set -g status-interval 1".to_string());
 
         let status_style = config
