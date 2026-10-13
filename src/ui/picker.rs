@@ -998,7 +998,20 @@ pub fn execute_selection(
                     ])
                     .status();
             } else {
-                let _ = Command::new("agy").args(["--project", project]).status();
+                let session_name = format!("agy-{}", project);
+                let config = crate::config::Config::load().unwrap_or_default();
+                let mut run_cmd = format!("agymux run --project '{}'", project);
+                if config.general.remote_control {
+                    run_cmd.push_str(" --remote-control");
+                }
+                crate::tmux::TmuxDriver::ensure_session(
+                    &session_name,
+                    workdir,
+                    &config,
+                    Some(&run_cmd),
+                    Some("+ new"),
+                )?;
+                crate::tmux::TmuxDriver::attach_session(&session_name)?;
             }
         }
         ItemKind::OpenTab {
@@ -1021,6 +1034,8 @@ pub fn execute_selection(
                         &format!("{}:{}", session, window_index),
                     ])
                     .status();
+            } else {
+                crate::tmux::TmuxDriver::attach_session(session)?;
             }
         }
         ItemKind::Historical {
@@ -1048,9 +1063,23 @@ pub fn execute_selection(
                     ])
                     .status();
             } else {
-                let _ = Command::new("agy")
-                    .args(["--project", effective_project, "-c", conversation_id])
-                    .status();
+                let session_name = format!("agy-{}", effective_project);
+                let config = crate::config::Config::load().unwrap_or_default();
+                let mut run_cmd = format!(
+                    "agymux run --project '{}' -c '{}'",
+                    effective_project, conversation_id
+                );
+                if config.general.remote_control {
+                    run_cmd.push_str(" --remote-control");
+                }
+                crate::tmux::TmuxDriver::ensure_session(
+                    &session_name,
+                    workdir,
+                    &config,
+                    Some(&run_cmd),
+                    Some("+ new"),
+                )?;
+                crate::tmux::TmuxDriver::attach_session(&session_name)?;
             }
         }
     }
