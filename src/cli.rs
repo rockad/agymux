@@ -22,6 +22,10 @@ pub struct Cli {
     #[arg(short = 'd', long = "direct", global = true)]
     pub direct: bool,
 
+    /// Enable remote control mode (Google Antigravity web surface sync)
+    #[arg(long = "remote-control", global = true)]
+    pub remote_control: bool,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -99,6 +103,8 @@ pub enum Commands {
         start_time: String,
         #[arg(long)]
         exclude_id: Option<String>,
+        #[arg(long)]
+        conversation_id: Option<String>,
     },
 }
 
@@ -252,11 +258,35 @@ mod tests {
                 project,
                 start_time,
                 exclude_id,
+                conversation_id,
             }) => {
                 assert_eq!(window, "@1");
                 assert_eq!(project, "my-project");
                 assert_eq!(start_time, "2026-10-09 12:00:00");
                 assert_eq!(exclude_id.as_deref(), Some("last-uuid"));
+                assert_eq!(conversation_id, None);
+            }
+            other => panic!("expected Watch, got {:?}", other),
+        }
+
+        let cli_with_cid = Cli::try_parse_from([
+            "agymux",
+            "watch",
+            "--window",
+            "@2",
+            "--project",
+            "my-project",
+            "--start-time",
+            "2026-10-09 12:00:00",
+            "--conversation-id",
+            "target-uuid",
+        ])
+        .expect("parsing succeeds");
+        match cli_with_cid.command {
+            Some(Commands::Watch {
+                conversation_id, ..
+            }) => {
+                assert_eq!(conversation_id.as_deref(), Some("target-uuid"));
             }
             other => panic!("expected Watch, got {:?}", other),
         }
@@ -280,5 +310,17 @@ mod tests {
             }
             other => panic!("expected Bind, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn test_cli_remote_control_flag() {
+        let cli_root = Cli::try_parse_from(["agymux", "--remote-control"]).expect("parsing succeeds");
+        assert!(cli_root.remote_control);
+
+        let cli_attach = Cli::try_parse_from(["agymux", "attach", "--remote-control"]).expect("parsing succeeds");
+        assert!(cli_attach.remote_control);
+
+        let cli_run = Cli::try_parse_from(["agymux", "run", "--remote-control"]).expect("parsing succeeds");
+        assert!(cli_run.remote_control);
     }
 }

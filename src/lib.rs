@@ -34,21 +34,26 @@ pub fn run() -> Result<()> {
         });
 
     let session_name = format!("agy-{}", project);
+    let remote_control = cli.remote_control || config.general.remote_control;
 
     // Direct execution without tmux
     if cli.direct {
         let mut cmd = Command::new("agy");
         cmd.args(["--project", &project]);
+        if remote_control {
+            cmd.arg("--remote-control");
+        }
         let status = cmd.status()?;
         std::process::exit(status.code().unwrap_or(0));
     }
 
     match cli.command {
         None => {
-            handle_attach(&project, &dir, &session_name, &config, &[])?;
+            handle_attach(&project, &dir, &session_name, &config, &[], remote_control)?;
         }
         Some(Commands::Attach { args }) => {
-            handle_attach(&project, &dir, &session_name, &config, &args)?;
+            let rc = remote_control || args.contains(&"--remote-control".to_string());
+            handle_attach(&project, &dir, &session_name, &config, &args, rc)?;
         }
 
         Some(Commands::Switch { scope }) => {
@@ -77,6 +82,7 @@ pub fn run() -> Result<()> {
                     "bind" => ui::palette::PaletteAction::BindConversation,
                     "term" | "terminal" => ui::palette::PaletteAction::NewTerminalTab,
                     "main" => ui::palette::PaletteAction::SwitchToMain,
+                    "reload" | "sync" | "refresh" => ui::palette::PaletteAction::ReloadActiveSession,
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;
@@ -96,6 +102,9 @@ pub fn run() -> Result<()> {
         Some(Commands::New { name, args }) => {
             let tab_name = name.unwrap_or_else(|| "+ new".to_string());
             let mut run_args = format!("agymux run --project '{}'", project);
+            if remote_control {
+                run_args.push_str(" --remote-control");
+            }
             if !args.is_empty() {
                 run_args.push(' ');
                 run_args.push_str(&args.join(" "));
@@ -131,7 +140,8 @@ pub fn run() -> Result<()> {
         }
 
         Some(Commands::Run { args }) => {
-            run_runner(&project, args)?;
+            let rc = remote_control || args.contains(&"--remote-control".to_string());
+            run_runner(&project, args, rc)?;
         }
 
         Some(Commands::Preview { conversation_id }) => {
@@ -147,8 +157,15 @@ pub fn run() -> Result<()> {
             project,
             start_time,
             exclude_id,
+            conversation_id,
         }) => {
-            run_watcher(&window, &project, &start_time, exclude_id.as_deref())?;
+            run_watcher(
+                &window,
+                &project,
+                &start_time,
+                exclude_id.as_deref(),
+                conversation_id.as_deref(),
+            )?;
         }
     }
 
@@ -161,6 +178,7 @@ fn handle_attach(
     session_name: &str,
     config: &Config,
     args: &[String],
+    remote_control: bool,
 ) -> Result<()> {
     use std::io::IsTerminal;
 
@@ -171,11 +189,14 @@ fn handle_attach(
         if std::env::var("TMUX").is_ok() {
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
                 if curr_session == session_name {
-                    return run_runner(project, args.to_vec());
+                    return run_runner(project, args.to_vec(), remote_control);
                 }
             }
             if !tmux::TmuxDriver::session_exists(session_name) {
                 let mut run_cmd = format!("agymux run --project '{}'", project);
+                if remote_control {
+                    run_cmd.push_str(" --remote-control");
+                }
                 run_cmd.push(' ');
                 run_cmd.push_str(&args.join(" "));
                 tmux::TmuxDriver::ensure_session(
@@ -191,6 +212,9 @@ fn handle_attach(
 
         if !tmux::TmuxDriver::session_exists(session_name) {
             let mut run_cmd = format!("agymux run --project '{}'", project);
+            if remote_control {
+                run_cmd.push_str(" --remote-control");
+            }
             run_cmd.push(' ');
             run_cmd.push_str(&args.join(" "));
             tmux::TmuxDriver::ensure_session(
@@ -219,7 +243,7 @@ fn handle_attach(
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
                 if curr_session == session_name {
                     // Already inside: run agy -c in this window
-                    return run_runner(project, vec!["-c".to_string()]);
+                    return run_runner(project, vec!["-c".to_string()], remote_control);
                 }
             }
             return tmux::TmuxDriver::switch_client(session_name);
@@ -295,7 +319,10 @@ fn handle_attach(
 
     match startup_action {
         crate::config::StartupAction::New => {
-            let run_cmd = format!("agymux run --project '{}'", project);
+            let mut run_cmd = format!("agymux run --project '{}'", project);
+            if remote_control {
+                run_cmd.push_str(" --remote-control");
+            }
             tmux::TmuxDriver::ensure_session(
                 session_name,
                 dir,
@@ -314,50 +341,21 @@ fn handle_attach(
                 let db = db_path();
                 if db.exists() {
                     rusqlite::Connection::open(&db).ok().and_then(|conn| {
-                        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
-                        let hygiene_and = if hygiene.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" AND {}", hygiene.join(" AND "))
-                        };
-                        let hygiene_where = if hygiene.is_empty() {
-                            String::new()
-                        } else {
-                            format!("WHERE {}", hygiene.join(" AND "))
-                        };
-
-                        let pattern = format!("%{}%", project);
-                        let sql_project = format!(
-                            "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
-                            hygiene_and
-                        );
-                        let sql_global = format!(
-                            "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
-                            hygiene_where
-                        );
-
-                        conn.query_row(
-                            &sql_project,
-                            rusqlite::params![pattern, project],
-                            |r| r.get::<_, String>(0),
-                        ).or_else(|_| {
-                            conn.query_row(
-                                &sql_global,
-                                [],
-                                |r| r.get::<_, String>(0),
-                            )
-                        }).ok()
+                        crate::core::session::latest_conversation_id(&conn, Some(project))
                     })
                 } else {
                     None
                 }
             };
 
-            let run_cmd = if let Some(ref lid) = latest_id {
+            let mut run_cmd = if let Some(ref lid) = latest_id {
                 format!("agymux run --project '{}' -c '{}'", project, lid)
             } else {
                 format!("agymux run --project '{}'", project)
             };
+            if remote_control {
+                run_cmd.push_str(" --remote-control");
+            }
 
             tmux::TmuxDriver::ensure_session(
                 session_name,
@@ -566,7 +564,7 @@ pub fn sanitize_title(raw: &str) -> String {
 }
 
 /// Internal process runner with instant prompt-based window naming and title watcher
-fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
+fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<()> {
     let in_tmux = std::env::var("TMUX").is_ok();
     let mut conv_id = None;
     let mut initial_prompt = None;
@@ -593,37 +591,7 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
             rusqlite::Connection::open(&db)
                 .ok()
                 .and_then(|conn| {
-                    let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
-                    let hygiene_and = if hygiene.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" AND {}", hygiene.join(" AND "))
-                    };
-                    let hygiene_where = if hygiene.is_empty() {
-                        String::new()
-                    } else {
-                        format!("WHERE {}", hygiene.join(" AND "))
-                    };
-                    let pattern = format!("%{}%", project);
-                    let sql_project = format!(
-                        "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
-                        hygiene_and
-                    );
-                    let sql_global = format!(
-                        "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
-                        hygiene_where
-                    );
-                    conn.query_row(
-                        &sql_project,
-                        rusqlite::params![pattern, project],
-                        |r| r.get::<_, String>(0),
-                    ).or_else(|_| {
-                        conn.query_row(
-                            &sql_global,
-                            [],
-                            |r| r.get::<_, String>(0),
-                        )
-                    }).ok()
+                    crate::core::session::latest_conversation_id(&conn, Some(project))
                 })
         } else {
             None
@@ -675,8 +643,8 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
         }
     }
 
-    // 2. Background detached watcher process for automatic title sync on new conversations
-    if in_tmux && conv_id.is_none() {
+    // 2. Background detached watcher process for title sync and external updates
+    if in_tmux {
         if let Some(ref win) = target_window {
             let mut watch_cmd = Command::new("agymux");
             watch_cmd.args([
@@ -691,6 +659,9 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
             if let Some(ref ex_id) = latest_existing_id {
                 watch_cmd.args(["--exclude-id", ex_id]);
             }
+            if let Some(ref cid) = conv_id {
+                watch_cmd.args(["--conversation-id", cid]);
+            }
             let _ = watch_cmd
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::null())
@@ -703,12 +674,19 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     let mut cmd = Command::new("agy");
     cmd.args(["--project", project]);
 
-    // Build args forwarding, ensuring -c <resolved_id> is passed if resolved
+    // Build args forwarding, ensuring -c <resolved_id> and --remote-control are passed appropriately
     let mut forward_args = Vec::new();
     let mut i = 0;
     let mut injected_cid = false;
+    let mut has_remote_control = false;
     while i < args.len() {
         let a = &args[i];
+        if a == "--remote-control" {
+            has_remote_control = true;
+            forward_args.push(a.clone());
+            i += 1;
+            continue;
+        }
         if a == "-c" || a == "--conversation" {
             forward_args.push(a.clone());
             if i + 1 < args.len() && !args[i + 1].starts_with('-') {
@@ -731,6 +709,9 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
             forward_args.push("-c".to_string());
             forward_args.push(cid.clone());
         }
+    }
+    if remote_control && !has_remote_control {
+        forward_args.push("--remote-control".to_string());
     }
 
     if !forward_args.is_empty() {
@@ -759,65 +740,194 @@ fn run_runner(project: &str, args: Vec<String>) -> Result<()> {
     }
 }
 
-/// Detached background watcher that polls SQLite for a newly created conversation and renames the window
+/// Detached background watcher that polls SQLite for a newly created conversation, renames the window,
+/// and continuously monitors for external turn / step count / mtime updates.
 fn run_watcher(
     target_window: &str,
     project: &str,
     start_time: &str,
     exclude_id: Option<&str>,
+    conversation_id: Option<&str>,
 ) -> Result<()> {
     let db = db_path();
-
     let proj = project.to_string();
     let pattern = format!("%{}%", proj);
 
-    for _ in 0..300 {
-        thread::sleep(Duration::from_millis(500));
-        if !db.exists() {
-            continue;
-        }
+    let mut active_cid: Option<String> = conversation_id.map(|s| s.to_string());
 
-        if let Ok(conn) = rusqlite::Connection::open(&db) {
-            let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
-            let hygiene_and = if hygiene.is_empty() {
-                String::new()
-            } else {
-                format!(" AND {}", hygiene.join(" AND "))
-            };
-            let sql = format!("
-                SELECT conversation_id, title 
-                FROM conversation_summaries 
-                WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
-                  AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
-                  AND (?4 IS NULL OR conversation_id != ?4)
-                  AND title IS NOT NULL AND title != ''{}
-                ORDER BY last_modified_time DESC 
-                LIMIT 1;
-            ", hygiene_and);
-            if let Ok(mut stmt) = conn.prepare(&sql) {
-                if let Ok((cid, title)) = stmt.query_row(
-                    rusqlite::params![pattern, proj, start_time, exclude_id],
-                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-                ) {
-                    let _ = Command::new("tmux")
-                        .args([
-                            "set-option",
-                            "-w",
-                            "-t",
-                            target_window,
-                            "@conversation_id",
-                            &cid,
-                        ])
-                        .status();
-                    let clean = sanitize_title(&title);
-                    let _ = Command::new("tmux")
-                        .args(["rename-window", "-t", target_window, &clean])
-                        .status();
-                    break;
+    // Phase 1: If no conversation ID was provided, poll for the newly created conversation
+    if active_cid.is_none() {
+        for _ in 0..300 {
+            thread::sleep(Duration::from_millis(500));
+
+            // Verify window still exists
+            let window_alive = Command::new("tmux")
+                .args(["display-message", "-p", "-t", target_window, "#{window_id}"])
+                .output()
+                .map(|o| o.status.success() && !o.stdout.is_empty())
+                .unwrap_or(false);
+            if !window_alive {
+                return Ok(());
+            }
+
+            if !db.exists() {
+                continue;
+            }
+
+            if let Ok(conn) = rusqlite::Connection::open(&db) {
+                let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+                let hygiene_and = if hygiene.is_empty() {
+                    String::new()
+                } else {
+                    format!(" AND {}", hygiene.join(" AND "))
+                };
+                let sql = format!("
+                    SELECT conversation_id, title 
+                    FROM conversation_summaries 
+                    WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
+                      AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
+                      AND (?4 IS NULL OR conversation_id != ?4)
+                      AND title IS NOT NULL AND title != ''{}
+                    ORDER BY last_modified_time DESC 
+                    LIMIT 1;
+                ", hygiene_and);
+                if let Ok(mut stmt) = conn.prepare(&sql) {
+                    if let Ok((cid, title)) = stmt.query_row(
+                        rusqlite::params![pattern, proj, start_time, exclude_id],
+                        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+                    ) {
+                        let _ = Command::new("tmux")
+                            .args([
+                                "set-option",
+                                "-w",
+                                "-t",
+                                target_window,
+                                "@conversation_id",
+                                &cid,
+                            ])
+                            .status();
+                        let clean = sanitize_title(&title);
+                        let _ = Command::new("tmux")
+                            .args(["rename-window", "-t", target_window, &clean])
+                            .status();
+                        active_cid = Some(cid);
+                        break;
+                    }
                 }
             }
         }
     }
+
+    // Phase 2: External sync loop for active conversation (monitoring step count, mtime, and title)
+    if let Some(cid) = active_cid {
+        let mut last_steps: Option<i64> = None;
+        let mut last_mtime: Option<i64> = None;
+        let mut last_title: Option<String> = None;
+
+        // Baseline initialization
+        if db.exists() {
+            if let Ok(conn) = rusqlite::Connection::open(&db) {
+                let _ = conn.query_row(
+                    "SELECT title, step_count, strftime('%s', last_modified_time) FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
+                    [&cid],
+                    |r| {
+                        last_title = r.get::<_, Option<String>>(0).ok().flatten();
+                        last_steps = r.get::<_, Option<i64>>(1).ok().flatten();
+                        let epoch_str: Option<String> = r.get(2).ok();
+                        if let Some(ep) = epoch_str {
+                            last_mtime = ep.parse::<i64>().ok();
+                        }
+                        Ok(())
+                    },
+                );
+            }
+        }
+
+        if let Some(steps) = last_steps {
+            let _ = Command::new("tmux")
+                .args(["set-option", "-w", "-t", target_window, "@step_count", &steps.to_string()])
+                .status();
+        }
+
+        // Poll for external updates while window exists (every 1s, up to 600 iterations)
+        for _ in 0..600 {
+            thread::sleep(Duration::from_secs(1));
+
+            // Verify window still exists in tmux
+            let window_alive = Command::new("tmux")
+                .args(["display-message", "-p", "-t", target_window, "#{window_id}"])
+                .output()
+                .map(|o| o.status.success() && !o.stdout.is_empty())
+                .unwrap_or(false);
+            if !window_alive {
+                break;
+            }
+
+            if !db.exists() {
+                continue;
+            }
+
+            if let Ok(conn) = rusqlite::Connection::open(&db) {
+                let row_res = conn.query_row(
+                    "SELECT title, step_count, strftime('%s', last_modified_time) FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
+                    [&cid],
+                    |r| {
+                        let t: Option<String> = r.get(0).ok();
+                        let s: Option<i64> = r.get(1).ok();
+                        let ep: Option<String> = r.get(2).ok();
+                        Ok((t, s, ep.and_then(|e| e.parse::<i64>().ok())))
+                    },
+                );
+
+                if let Ok((curr_title, curr_steps, curr_mtime)) = row_res {
+                    let mut changed = false;
+
+                    if let Some(steps) = curr_steps {
+                        if last_steps.is_none_or(|prev| steps > prev) {
+                            last_steps = Some(steps);
+                            changed = true;
+                            let _ = Command::new("tmux")
+                                .args(["set-option", "-w", "-t", target_window, "@step_count", &steps.to_string()])
+                                .status();
+                        }
+                    }
+
+                    if let Some(mtime) = curr_mtime {
+                        if last_mtime.is_none_or(|prev| mtime > prev) {
+                            last_mtime = Some(mtime);
+                            changed = true;
+                        }
+                    }
+
+                    // Direct file mtime check
+                    let (_, file_mtime) = crate::core::session::get_conversation_mtime_and_steps(None, &cid);
+                    if let Some(fmtime) = file_mtime {
+                        if last_mtime.is_some_and(|prev| fmtime > prev) {
+                            last_mtime = Some(fmtime);
+                            changed = true;
+                        }
+                    }
+
+                    if changed {
+                        let _ = Command::new("tmux")
+                            .args(["set-option", "-w", "-t", target_window, "@external_sync", "1"])
+                            .status();
+                    }
+
+                    if let Some(ref t) = curr_title {
+                        if !t.is_empty() && last_title.as_ref() != Some(t) {
+                            let clean = sanitize_title(t);
+                            let _ = Command::new("tmux")
+                                .args(["rename-window", "-t", target_window, &clean])
+                                .status();
+                            last_title = Some(t.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok(())
 }
 

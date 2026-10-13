@@ -29,6 +29,7 @@ pub enum PaletteAction {
     BindConversation,
     NewTerminalTab,
     SwitchToMain,
+    ReloadActiveSession,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +43,12 @@ pub struct PaletteItem {
 impl PaletteItem {
     pub fn all() -> Vec<Self> {
         vec![
+            PaletteItem {
+                action: PaletteAction::ReloadActiveSession,
+                icon: "🔄",
+                title: "Reload active session (-c)",
+                shortcut: "Ctrl+Space R / К",
+            },
             PaletteItem {
                 action: PaletteAction::RenameTab,
                 icon: "📝",
@@ -187,6 +194,14 @@ impl PaletteState {
                     }
                     PaletteAction::SwitchToMain => {
                         "main".contains(&q) || "terminal".contains(&q) || "term".contains(&q)
+                    }
+                    PaletteAction::ReloadActiveSession => {
+                        "reload".contains(&q)
+                            || "sync".contains(&q)
+                            || "refresh".contains(&q)
+                            || "resume".contains(&q)
+                            || q == "r"
+                            || q == "к"
                     }
                     _ => false,
                 }
@@ -525,6 +540,62 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                     "tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main",
                 ])
                 .status();
+        }
+        PaletteAction::ReloadActiveSession => {
+            let cid_output = Command::new("tmux")
+                .args(["display-message", "-p", "#{@conversation_id}"])
+                .output();
+            let current_cid = cid_output
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty() && s != "-")
+                .or_else(|| std::env::var("CONVERSATION_ID").ok())
+                .filter(|s| !s.is_empty())
+                .or_else(|| {
+                    let db = crate::db_path();
+                    if db.exists() {
+                        rusqlite::Connection::open(&db).ok().and_then(|conn| {
+                            crate::core::session::latest_conversation_id(&conn, Some(proj))
+                        })
+                    } else {
+                        None
+                    }
+                });
+
+            if let Some(cid) = current_cid {
+                let config = crate::config::Config::load().unwrap_or_default();
+                let rc_flag = if config.general.remote_control {
+                    " --remote-control"
+                } else {
+                    ""
+                };
+                let reload_cmd = format!("agymux run --project '{}' -c '{}'{}", proj, cid, rc_flag);
+
+                if std::env::var("TMUX").is_ok() {
+                    let _ = Command::new("tmux")
+                        .args(["respawn-pane", "-k", &reload_cmd])
+                        .status();
+                    let toast = format!("Reloaded session: {}", cid);
+                    let _ = Command::new("tmux")
+                        .args(["display-message", &toast])
+                        .status();
+                } else {
+                    println!("Reloading session: {}", cid);
+                    let mut cmd = Command::new("agy");
+                    cmd.args(["--project", proj, "-c", &cid]);
+                    if config.general.remote_control {
+                        cmd.arg("--remote-control");
+                    }
+                    let _ = cmd.status();
+                }
+            } else if std::env::var("TMUX").is_ok() {
+                let _ = Command::new("tmux")
+                    .args(["display-message", "No active conversation bound to reload"])
+                    .status();
+            } else {
+                println!("No active conversation bound to reload");
+            }
         }
     }
     Ok(())

@@ -118,6 +118,7 @@ impl TmuxProfile {
         lines.push("bind q detach-client".to_string());
         lines.push("bind b display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
         lines.push("bind t new-window -n \"term\" \"$SHELL\"".to_string());
+        lines.push("bind R run-shell \"agymux palette -a reload\"".to_string());
         lines.push(
             "bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
         );
@@ -142,6 +143,7 @@ impl TmuxProfile {
             lines.push("bind ч kill-window".to_string());
             lines.push("bind в detach-client".to_string());
             lines.push("bind к refresh-client".to_string());
+            lines.push("bind К run-shell \"agymux palette -a reload\"".to_string());
             lines.push("bind й detach-client".to_string());
             lines.push("bind и display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
             lines.push("bind е new-window -n \"term\" \"$SHELL\"".to_string());

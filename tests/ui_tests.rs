@@ -62,7 +62,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 14);
+    assert_eq!(state.items.len(), 15);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -84,6 +84,16 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     assert_eq!(state.query, "ren");
     assert!(!state.filtered_indices.is_empty());
     assert_eq!(state.selected_action(), Some(PaletteAction::RenameTab));
+
+    // Test query for "reload" / "sync" finds ReloadActiveSession
+    state.query.clear();
+    for c in "reload".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::ReloadActiveSession));
 
     // Test query for "quit" / "exit" finds QuitKeepTabs
     state.query.clear();

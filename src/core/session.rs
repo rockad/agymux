@@ -438,6 +438,85 @@ pub fn session_hygiene_conditions(conn: &Connection, table_name: &str) -> Vec<St
     filters
 }
 
+/// Query the latest conversation ID respecting hygiene rules (for a project or globally)
+pub fn latest_conversation_id(conn: &Connection, project: Option<&str>) -> Option<String> {
+    let hygiene = session_hygiene_conditions(conn, "conversation_summaries");
+    let hygiene_and = if hygiene.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {}", hygiene.join(" AND "))
+    };
+    let hygiene_where = if hygiene.is_empty() {
+        String::new()
+    } else {
+        format!("WHERE {}", hygiene.join(" AND "))
+    };
+
+    if let Some(proj) = project {
+        let pattern = format!("%{}%", proj);
+        let sql_project = format!(
+            "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
+            hygiene_and
+        );
+        if let Ok(id) = conn.query_row(
+            &sql_project,
+            rusqlite::params![pattern, proj],
+            |r| r.get::<_, String>(0),
+        ) {
+            return Some(id);
+        }
+    }
+
+    let sql_global = format!(
+        "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
+        hygiene_where
+    );
+    conn.query_row(
+        &sql_global,
+        [],
+        |r| r.get::<_, String>(0),
+    ).ok()
+}
+
+/// Query current step count and last modified epoch for a conversation (from SQLite and transcript file)
+pub fn get_conversation_mtime_and_steps(db_conn: Option<&Connection>, conv_id: &str) -> (Option<i64>, Option<i64>) {
+    let mut step_count = None;
+    let mut last_modified_epoch = None;
+
+    if let Some(conn) = db_conn {
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT step_count, strftime('%s', last_modified_time) FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
+        ) {
+            if let Ok((steps, epoch_str)) = stmt.query_row([conv_id], |r| {
+                let s: i64 = r.get(0)?;
+                let ep: Option<String> = r.get(1).ok();
+                Ok((s, ep))
+            }) {
+                step_count = Some(steps);
+                if let Some(ep) = epoch_str {
+                    last_modified_epoch = ep.parse::<i64>().ok();
+                }
+            }
+        }
+    }
+
+    if last_modified_epoch.is_none() {
+        let brain_dir = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".gemini/antigravity-cli/brain");
+        let p1 = brain_dir.join(conv_id).join(".system_generated/logs/transcript.jsonl");
+        if let Ok(meta) = std::fs::metadata(&p1) {
+            if let Ok(modified) = meta.modified() {
+                if let Ok(dur) = modified.duration_since(std::time::UNIX_EPOCH) {
+                    last_modified_epoch = Some(dur.as_secs() as i64);
+                }
+            }
+        }
+    }
+
+    (step_count, last_modified_epoch)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -66,6 +66,8 @@ pub struct GeneralConfig {
     pub default_effort: String,
     #[serde(default = "default_startup_action")]
     pub startup_action: StartupAction,
+    #[serde(default)]
+    pub remote_control: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,6 +139,7 @@ impl Default for GeneralConfig {
             default_model: default_model(),
             default_effort: default_effort(),
             startup_action: default_startup_action(),
+            remote_control: false,
         }
     }
 }
@@ -249,6 +252,7 @@ mod tests {
         assert_eq!(config.general.default_model, "Gemini 3.6 Flash (Medium)");
         assert_eq!(config.general.default_effort, "medium");
         assert_eq!(config.general.startup_action, StartupAction::Ask);
+        assert!(!config.general.remote_control);
         assert_eq!(config.theme.preset, "default");
         assert!(!config.theme.rounded_pills);
         assert_eq!(config.theme.status_position, "top");
@@ -302,6 +306,7 @@ projects_dir = "/custom/projects"
 default_model = "Claude 3.7 Sonnet"
 default_effort = "high"
 startup_action = "resume_latest"
+remote_control = true
 
 [theme]
 preset = "catppuccin-mocha"
@@ -320,6 +325,7 @@ isolated_socket = true
         assert_eq!(config.general.default_model, "Claude 3.7 Sonnet");
         assert_eq!(config.general.default_effort, "high");
         assert_eq!(config.general.startup_action, StartupAction::ResumeLatest);
+        assert!(config.general.remote_control);
         assert_eq!(config.theme.preset, "catppuccin-mocha");
         assert!(config.theme.rounded_pills);
         assert_eq!(config.theme.status_position, "bottom");
