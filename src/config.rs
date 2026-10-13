@@ -76,6 +76,16 @@ pub struct ThemeConfig {
     pub rounded_pills: bool,
     #[serde(default = "default_status_position")]
     pub status_position: String,
+    #[serde(default)]
+    pub status_style: Option<String>,
+    #[serde(default)]
+    pub status_left: Option<String>,
+    #[serde(default)]
+    pub status_right: Option<String>,
+    #[serde(default)]
+    pub window_status_format: Option<String>,
+    #[serde(default)]
+    pub window_status_current_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -137,6 +147,11 @@ impl Default for ThemeConfig {
             preset: default_preset(),
             rounded_pills: default_false(),
             status_position: default_status_position(),
+            status_style: None,
+            status_left: None,
+            status_right: None,
+            window_status_format: None,
+            window_status_current_format: None,
         }
     }
 }

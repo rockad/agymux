@@ -18,50 +18,6 @@ impl TmuxProfile {
         let position = &config.theme.status_position;
         let cyrillic = config.keybindings.bilingual_cyrillic;
 
-        // Theming: terminal default inheritance vs custom preset
-        let is_custom_octagon = config.theme.preset == "monokai-pro-octagon";
-
-        let bg = if is_custom_octagon {
-            "#282a3a"
-        } else {
-            "default"
-        };
-        let fg = if is_custom_octagon {
-            "#eaf2f1"
-        } else {
-            "default"
-        };
-        let inactive_bg = if is_custom_octagon {
-            "#221f22"
-        } else {
-            "default"
-        };
-        let inactive_fg = if is_custom_octagon {
-            "#727072"
-        } else {
-            "default"
-        };
-        let active_accent = if is_custom_octagon {
-            "#a9dc76"
-        } else {
-            "default"
-        };
-        let active_text = if is_custom_octagon {
-            "#282a3a"
-        } else {
-            "default"
-        };
-        let prefix_alert = if is_custom_octagon {
-            "#ff6188"
-        } else {
-            "default"
-        };
-        let purple = if is_custom_octagon {
-            "#ab9df2"
-        } else {
-            "default"
-        };
-
         let mut lines = Vec::new();
         lines.push("# agymux dynamic tmux configuration".to_string());
         lines.push("set -g default-terminal \"tmux-256color\"".to_string());
@@ -76,59 +32,57 @@ impl TmuxProfile {
         lines.push("setw -g pane-base-index 1".to_string());
         lines.push("set -g renumber-windows on".to_string());
 
-        // Status bar layout
+        // Status bar layout (inherits terminal background and foreground by default)
         lines.push(format!("set -g status-position {}", position));
         lines.push("set -g status-interval 1".to_string());
-        lines.push(format!("set -g status-style \"bg={},fg={}\"", bg, fg));
+
+        let status_style = config
+            .theme
+            .status_style
+            .as_deref()
+            .unwrap_or("bg=default,fg=default");
+        lines.push(format!("set -g status-style \"{}\"", status_style));
         lines.push("set -g status-left-length 40".to_string());
         lines.push("set -g status-right-length 60".to_string());
 
-        // Status Left & Window formats: Flat vs Rounded Pills vs Terminal Default
-        let (status_left, window_format, active_window_format) = if config.theme.rounded_pills
-            && is_custom_octagon
-        {
-            let s_left = format!(
-                "#{{?client_prefix,#[fg={prefix_alert}]#[bg={bg}]#[bg={prefix_alert}]#[fg={bg}]#[bold] 󰘳 PREFIX #[fg={prefix_alert}]#[bg={bg}] ,#[fg={purple}]#[bg={bg}]#[bg={purple}]#[fg={bg}]#[bold] #S #[fg={purple}]#[bg={bg}] }}"
-            );
-            let w_fmt = format!(
-                "#[fg={inactive_bg}]#[bg={bg}]#[bg={inactive_bg}]#[fg={inactive_fg}] #I #W #[fg={inactive_bg}]#[bg={bg}]"
-            );
-            let aw_fmt = format!(
-                "#[fg={active_accent}]#[bg={bg}]#[bg={active_accent}]#[fg={active_text}]#[bold] #I #W #[fg={active_accent}]#[bg={bg}]"
-            );
-            (s_left, w_fmt, aw_fmt)
-        } else if is_custom_octagon {
-            let s_left =
-                "#{{?client_prefix,#[fg=#282a3a]#[bg=#ff6188]#[bold] 󰘳 PREFIX #[default] ,#[fg=#282a3a]#[bg=#ab9df2]#[bold] #S #[default] }}".to_string();
-            let w_fmt = "#[fg=#727072,bg=#221f22] #I #W #[default]".to_string();
-            let aw_fmt = "#[fg=#282a3a,bg=#a9dc76,bold] #I #W #[default]".to_string();
-            (s_left, w_fmt, aw_fmt)
-        } else {
-            // Default: inherit terminal foreground and background without hardcoded theme
-            let s_left =
-                "#{{?client_prefix,#[reverse,bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }}"
-                    .to_string();
-            let w_fmt = " #I #W ".to_string();
-            let aw_fmt = "#[reverse,bold] #I #W #[default]".to_string();
-            (s_left, w_fmt, aw_fmt)
-        };
-
+        // Status Left: inherit terminal colors unless explicitly overridden
+        let status_left = config
+            .theme
+            .status_left
+            .as_deref()
+            .unwrap_or("#{?client_prefix,#[reverse,bold] 󰘳 PREFIX #[default] ,#[bold] #S #[default] }");
         lines.push(format!("set -g status-left \"{}\"", status_left));
+
         lines.push("setw -g window-status-separator \" \"".to_string());
+
+        // Window status format: clean default terminal text
+        let window_format = config
+            .theme
+            .window_status_format
+            .as_deref()
+            .unwrap_or(" #I #W ");
         lines.push(format!(
             "setw -g window-status-format \"{}\"",
             window_format
         ));
+
+        // Active window format: clean terminal reverse highlight
+        let active_window_format = config
+            .theme
+            .window_status_current_format
+            .as_deref()
+            .unwrap_or("#[reverse,bold] #I #W #[default]");
         lines.push(format!(
             "setw -g window-status-current-format \"{}\"",
             active_window_format
         ));
 
-        // Status Right: Model info & time
-        let status_right = format!(
-            "#[fg={}]agy #[fg={}]#[bg={}] %H:%M #[default]",
-            inactive_fg, fg, bg
-        );
+        // Status Right: Model info & time (inherits terminal colors)
+        let status_right = config
+            .theme
+            .status_right
+            .as_deref()
+            .unwrap_or("%H:%M agymux ");
         lines.push(format!("set -g status-right \"{}\"", status_right));
 
         // Prefix key
@@ -270,24 +224,25 @@ mod tests {
     }
 
     #[test]
-    fn test_profile_custom_octagon_preset() {
+    fn test_profile_config_style_overrides() {
         let mut config = Config::default();
-        config.theme.preset = "monokai-pro-octagon".to_string();
+        config.theme.status_style = Some("bg=black,fg=white".to_string());
+        config.theme.window_status_current_format =
+            Some("#[bold,fg=green] #I #W #[default]".to_string());
         let content = TmuxProfile::render_content(&config);
 
-        assert!(content.contains("#[fg=#727072,bg=#221f22] #I #W #[default]"));
-        assert!(content.contains("#[fg=#282a3a,bg=#a9dc76,bold] #I #W #[default]"));
+        assert!(content.contains("set -g status-style \"bg=black,fg=white\""));
+        assert!(content.contains("setw -g window-status-current-format \"#[bold,fg=green] #I #W #[default]\""));
     }
 
     #[test]
-    fn test_profile_rounded_pills_when_enabled() {
-        let mut config = Config::default();
-        config.theme.preset = "monokai-pro-octagon".to_string();
-        config.theme.rounded_pills = true;
+    fn test_profile_default_inherits_terminal() {
+        let config = Config::default();
         let content = TmuxProfile::render_content(&config);
 
-        assert!(content.contains(''));
-        assert!(content.contains(''));
+        assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
+        assert!(content.contains("setw -g window-status-format \" #I #W \""));
+        assert!(content.contains("setw -g window-status-current-format \"#[reverse,bold] #I #W #[default]\""));
     }
 
     #[test]
