@@ -55,12 +55,12 @@ impl TmuxProfile {
 
         lines.push("setw -g window-status-separator \" \"".to_string());
 
-        // Window status format: inactive tab with distinctive white text on black, and highlighted alert on action/response required
+        // Window status format: inactive tab with white text on elevated dark background, and black text on yellow alert
         let window_format = config
             .theme
             .window_status_format
             .as_deref()
-            .unwrap_or("#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}");
+            .unwrap_or("#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}");
         lines.push(format!(
             "setw -g window-status-format \"{}\"",
             window_format
@@ -203,7 +203,7 @@ mod tests {
         assert!(!content.contains(''));
         assert!(!content.contains(''));
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}\""));
+        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
         assert!(content
             .contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
@@ -242,7 +242,7 @@ mod tests {
         let content = TmuxProfile::render_content(&config);
 
         assert!(content.contains("set -g status-style \"bg=default,fg=default\""));
-        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=black] #I #W #[default]}\""));
+        assert!(content.contains("setw -g window-status-format \"#{?#{||:#{window_activity_flag},#{window_bell_flag}},#[fg=black]#[bg=yellow]#[bold] 󰂞 #I #W #[default],#[fg=white]#[bg=brightblack] #I #W #[default]}\""));
         assert!(content.contains("setw -g window-status-current-format \"#[fg=black]#[bg=green]#[bold] #I #W #[default]\""));
         assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
     }
