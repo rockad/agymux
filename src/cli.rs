@@ -92,6 +92,22 @@ pub enum Commands {
         conversation_id: Option<String>,
     },
 
+    /// Toggle or set cockpit layout mode (horizontal tabs vs IDE vertical sidebar rail)
+    Layout {
+        /// Layout mode: "horizontal" or "vertical" (defaults to toggle)
+        mode: Option<String>,
+    },
+
+    /// Render interactive OpenCode-style vertical session rail sidebar
+    Rail,
+
+    /// Internal lifecycle hook invoked by Antigravity on turn stop
+    #[command(hide = true)]
+    Hook,
+
+    /// Install or update agymux lifecycle hook in Antigravity configuration
+    Install,
+
     /// Internal background watcher for renaming windows
     #[command(hide = true)]
     Watch {
@@ -314,13 +330,51 @@ mod tests {
 
     #[test]
     fn test_cli_remote_control_flag() {
-        let cli_root = Cli::try_parse_from(["agymux", "--remote-control"]).expect("parsing succeeds");
+        let cli_root =
+            Cli::try_parse_from(["agymux", "--remote-control"]).expect("parsing succeeds");
         assert!(cli_root.remote_control);
 
-        let cli_attach = Cli::try_parse_from(["agymux", "attach", "--remote-control"]).expect("parsing succeeds");
+        let cli_attach = Cli::try_parse_from(["agymux", "attach", "--remote-control"])
+            .expect("parsing succeeds");
         assert!(cli_attach.remote_control);
 
-        let cli_run = Cli::try_parse_from(["agymux", "run", "--remote-control"]).expect("parsing succeeds");
+        let cli_run =
+            Cli::try_parse_from(["agymux", "run", "--remote-control"]).expect("parsing succeeds");
         assert!(cli_run.remote_control);
+    }
+
+    #[test]
+    fn test_cli_layout_and_rail_subcommands() {
+        let cli_layout = Cli::try_parse_from(["agymux", "layout"]).expect("parsing succeeds");
+        match cli_layout.command {
+            Some(Commands::Layout { mode }) => {
+                assert_eq!(mode, None);
+            }
+            other => panic!("expected Layout, got {:?}", other),
+        }
+
+        let cli_layout_vert =
+            Cli::try_parse_from(["agymux", "layout", "vertical"]).expect("parsing succeeds");
+        match cli_layout_vert.command {
+            Some(Commands::Layout { mode }) => {
+                assert_eq!(mode.as_deref(), Some("vertical"));
+            }
+            other => panic!("expected Layout, got {:?}", other),
+        }
+
+        let cli_rail = Cli::try_parse_from(["agymux", "rail"]).expect("parsing succeeds");
+        match cli_rail.command {
+            Some(Commands::Rail) => {}
+            other => panic!("expected Rail, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_cli_hook_and_install_subcommands() {
+        let cli_hook = Cli::try_parse_from(["agymux", "hook"]).expect("parsing succeeds");
+        assert!(matches!(cli_hook.command, Some(Commands::Hook)));
+
+        let cli_install = Cli::try_parse_from(["agymux", "install"]).expect("parsing succeeds");
+        assert!(matches!(cli_install.command, Some(Commands::Install)));
     }
 }

@@ -153,9 +153,33 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Ctrl+Space ?  /  h  /  р",
         "Display this shortcuts cheatsheet",
     ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space B  /  И",
+        "Toggle IDE Sidebar Layout (rail)",
+    ));
     text_lines.push(Line::raw(""));
 
-    // Section 4: Inside Picker
+    // Section 4: Mouse Controls
+    text_lines.push(Line::from(vec![Span::styled(
+        "▌ MOUSE CONTROLS",
+        Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+    )]));
+    text_lines.push(shortcut_line(
+        "Left-Click 󰅖",
+        "Close clicked tab (guarded on last tab)",
+    ));
+    text_lines.push(shortcut_line("Middle-Click", "Close clicked tab directly"));
+    text_lines.push(shortcut_line(
+        "Right-Click",
+        "Open Tab Context Menu (Close, Rename, Fork)",
+    ));
+    text_lines.push(shortcut_line(
+        "Click Tab Body",
+        "Switch client view to clicked tab",
+    ));
+    text_lines.push(Line::raw(""));
+
+    // Section 5: Inside Picker
     text_lines.push(Line::from(vec![Span::styled(
         "▌ INSIDE TWO-PANE PICKER",
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),

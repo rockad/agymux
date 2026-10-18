@@ -781,7 +781,8 @@ fn load_historical_conversations(
     }
 
     if let Ok(conn) = Connection::open(&db_path) {
-        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+        let hygiene =
+            crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
         let hygiene_and = if hygiene.is_empty() {
             String::new()
         } else {
@@ -793,7 +794,11 @@ fn load_historical_conversations(
             format!("WHERE {}", hygiene.join(" AND "))
         };
 
-        let step_count_col = if crate::core::session::table_has_column(&conn, "conversation_summaries", "step_count") {
+        let step_count_col = if crate::core::session::table_has_column(
+            &conn,
+            "conversation_summaries",
+            "step_count",
+        ) {
             "step_count"
         } else {
             "0 AS step_count"

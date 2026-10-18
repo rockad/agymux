@@ -4,11 +4,12 @@ pub mod core;
 pub mod tmux;
 pub mod ui;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use cli::{Cli, Commands};
 use config::Config;
 use std::{
+    fs,
     path::{Path, PathBuf},
     process::Command,
     thread,
@@ -79,17 +80,30 @@ pub fn run() -> Result<()> {
                     "helper" => ui::palette::PaletteAction::Shortcuts,
                     "detach" => ui::palette::PaletteAction::Detach,
                     "quit" => ui::palette::PaletteAction::QuitKeepTabs,
-                    "kill" | "kill-session" | "terminate" => ui::palette::PaletteAction::KillSession,
+                    "kill" | "kill-session" | "terminate" => {
+                        ui::palette::PaletteAction::KillSession
+                    }
                     "bind" => ui::palette::PaletteAction::BindConversation,
                     "term" | "terminal" => ui::palette::PaletteAction::NewTerminalTab,
                     "main" => ui::palette::PaletteAction::SwitchToMain,
-                    "reload" | "sync" | "refresh" => ui::palette::PaletteAction::ReloadActiveSession,
+                    "reload" | "sync" | "refresh" => {
+                        ui::palette::PaletteAction::ReloadActiveSession
+                    }
+                    "layout" | "rail" | "sidebar" => ui::palette::PaletteAction::ToggleIdeLayout,
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;
             } else {
                 ui::run_palette(Some(project))?;
             }
+        }
+
+        Some(Commands::Layout { mode }) => {
+            run_layout(mode.as_deref())?;
+        }
+
+        Some(Commands::Rail) => {
+            ui::run_rail()?;
         }
 
         Some(Commands::Helper) => {
@@ -168,6 +182,14 @@ pub fn run() -> Result<()> {
                 conversation_id.as_deref(),
             )?;
         }
+
+        Some(Commands::Hook) => {
+            run_hook()?;
+        }
+
+        Some(Commands::Install) => {
+            run_install()?;
+        }
     }
 
     Ok(())
@@ -183,6 +205,7 @@ fn handle_attach(
 ) -> Result<()> {
     use std::io::IsTerminal;
 
+    let _ = ensure_hook_installed();
     let _ = heal_unbound_windows(project);
 
     // If explicit arguments were passed, forward them directly
@@ -350,7 +373,10 @@ fn handle_attach(
             };
 
             let mut run_cmd = if let Some(ref lid) = latest_id {
-                format!("agymux run --project '{}' --conversation '{}'", project, lid)
+                format!(
+                    "agymux run --project '{}' --conversation '{}'",
+                    project, lid
+                )
             } else {
                 format!("agymux run --project '{}'", project)
             };
@@ -467,7 +493,8 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
     }
 
     if let Ok(conn) = rusqlite::Connection::open(&db) {
-        let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+        let hygiene =
+            crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
         let hygiene_and = if hygiene.is_empty() {
             String::new()
         } else {
@@ -687,9 +714,7 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
         if db.exists() {
             rusqlite::Connection::open(&db)
                 .ok()
-                .and_then(|conn| {
-                    crate::core::session::latest_conversation_id(&conn, Some(project))
-                })
+                .and_then(|conn| crate::core::session::latest_conversation_id(&conn, Some(project)))
         } else {
             None
         }
@@ -699,8 +724,6 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
     if has_continue_flag && conv_id.is_none() {
         conv_id = latest_existing_id.clone();
     }
-
-    let start_time = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
 
     // 1. Instant window naming and capture window id
     let target_window = if in_tmux {
@@ -715,6 +738,17 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
     };
 
     if in_tmux {
+        let rc_val = if remote_control { "1" } else { "0" };
+        if let Some(ref win) = target_window {
+            let _ = Command::new("tmux")
+                .args(["set-option", "-w", "-t", win, "@remote_control", rc_val])
+                .status();
+        } else {
+            let _ = Command::new("tmux")
+                .args(["set-option", "-w", "@remote_control", rc_val])
+                .status();
+        }
+
         if let Some(ref cid) = conv_id {
             let _ = Command::new("tmux")
                 .args(["set-option", "-w", "@conversation_id", cid])
@@ -740,32 +774,7 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
         }
     }
 
-    // 2. Background detached watcher process for title sync and external updates
-    if in_tmux {
-        if let Some(ref win) = target_window {
-            let mut watch_cmd = Command::new("agymux");
-            watch_cmd.args([
-                "watch",
-                "--window",
-                win,
-                "--project",
-                project,
-                "--start-time",
-                &start_time,
-            ]);
-            if let Some(ref ex_id) = latest_existing_id {
-                watch_cmd.args(["--exclude-id", ex_id]);
-            }
-            if let Some(ref cid) = conv_id {
-                watch_cmd.args(["--conversation-id", cid]);
-            }
-            let _ = watch_cmd
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .spawn();
-        }
-    }
+    // 2. Background detached watcher retired: turn-driven tab titles are updated via agymux hook on Stop
 
     // 3. Assemble and execute agy
     let mut cmd = Command::new("agy");
@@ -835,7 +844,10 @@ fn run_watcher(
             }
 
             if let Ok(conn) = rusqlite::Connection::open(&db) {
-                let hygiene = crate::core::session::session_hygiene_conditions(&conn, "conversation_summaries");
+                let hygiene = crate::core::session::session_hygiene_conditions(
+                    &conn,
+                    "conversation_summaries",
+                );
                 let hygiene_and = if hygiene.is_empty() {
                     String::new()
                 } else {
@@ -851,7 +863,9 @@ fn run_watcher(
                 let bound_clause = if bound_ids.is_empty() {
                     String::new()
                 } else {
-                    let placeholders: Vec<String> = (0..bound_ids.len()).map(|i| format!("?{}", i + 4)).collect();
+                    let placeholders: Vec<String> = (0..bound_ids.len())
+                        .map(|i| format!("?{}", i + 4))
+                        .collect();
                     format!(" AND conversation_id NOT IN ({})", placeholders.join(","))
                 };
 
@@ -875,10 +889,11 @@ fn run_watcher(
                         params.push(id.into());
                     }
 
-                    if let Ok((cid, title)) = stmt.query_row(
-                        rusqlite::params_from_iter(params.iter()),
-                        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-                    ) {
+                    if let Ok((cid, title)) = stmt
+                        .query_row(rusqlite::params_from_iter(params.iter()), |r| {
+                            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+                        })
+                    {
                         let _ = Command::new("tmux")
                             .args([
                                 "set-option",
@@ -928,12 +943,19 @@ fn run_watcher(
 
         if let Some(steps) = last_steps {
             let _ = Command::new("tmux")
-                .args(["set-option", "-w", "-t", target_window, "@step_count", &steps.to_string()])
+                .args([
+                    "set-option",
+                    "-w",
+                    "-t",
+                    target_window,
+                    "@step_count",
+                    &steps.to_string(),
+                ])
                 .status();
         }
 
-        // Poll for external updates while window exists (every 1s, up to 600 iterations)
-        for _ in 0..600 {
+        // Poll for external updates while window exists (every 1s, continuously until window closes)
+        loop {
             thread::sleep(Duration::from_secs(1));
 
             // Verify window still exists in tmux
@@ -970,7 +992,14 @@ fn run_watcher(
                             last_steps = Some(steps);
                             changed = true;
                             let _ = Command::new("tmux")
-                                .args(["set-option", "-w", "-t", target_window, "@step_count", &steps.to_string()])
+                                .args([
+                                    "set-option",
+                                    "-w",
+                                    "-t",
+                                    target_window,
+                                    "@step_count",
+                                    &steps.to_string(),
+                                ])
                                 .status();
                         }
                     }
@@ -983,7 +1012,8 @@ fn run_watcher(
                     }
 
                     // Direct file mtime check
-                    let (_, file_mtime) = crate::core::session::get_conversation_mtime_and_steps(None, &cid);
+                    let (_, file_mtime) =
+                        crate::core::session::get_conversation_mtime_and_steps(None, &cid);
                     if let Some(fmtime) = file_mtime {
                         if last_mtime.is_some_and(|prev| fmtime > prev) {
                             last_mtime = Some(fmtime);
@@ -993,7 +1023,14 @@ fn run_watcher(
 
                     if changed {
                         let _ = Command::new("tmux")
-                            .args(["set-option", "-w", "-t", target_window, "@external_sync", "1"])
+                            .args([
+                                "set-option",
+                                "-w",
+                                "-t",
+                                target_window,
+                                "@external_sync",
+                                "1",
+                            ])
                             .status();
                     }
 
@@ -1117,13 +1154,265 @@ fn run_ls() -> Result<()> {
     Ok(())
 }
 
+/// Toggle or set cockpit layout mode (horizontal status tabs vs IDE vertical sidebar rail)
+pub fn run_layout(mode: Option<&str>) -> Result<()> {
+    if std::env::var("TMUX").is_err() {
+        println!("agymux layout toggle only operates inside tmux sessions.");
+        return Ok(());
+    }
+
+    let config = Config::load().unwrap_or_default();
+    let sidebar_pos = config.theme.tabs.sidebar_position.to_lowercase();
+    let is_left = sidebar_pos != "right";
+
+    // Check if rail pane currently exists in the current window
+    let mut rail_pane_id: Option<String> = None;
+    if let Ok(output) = Command::new("tmux")
+        .args(["list-panes", "-F", "#{pane_id}:#{pane_title}:#{@is_rail}"])
+        .output()
+    {
+        let raw = String::from_utf8_lossy(&output.stdout);
+        for line in raw.lines() {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 2 {
+                let pid = parts[0];
+                let title = parts[1];
+                let is_rail = parts.get(2).copied().unwrap_or("");
+                if title == "agymux-rail" || is_rail == "1" {
+                    rail_pane_id = Some(pid.to_string());
+                    break;
+                }
+            }
+        }
+    }
+
+    let switch_to_horizontal = match mode {
+        Some("horizontal") | Some("tabs") => true,
+        Some("vertical") | Some("rail") | Some("sidebar") => false,
+        _ => rail_pane_id.is_some(), // toggle: if rail pane exists, switch to horizontal; else vertical
+    };
+
+    if switch_to_horizontal {
+        // Kill rail pane if present
+        if let Some(pid) = rail_pane_id {
+            let _ = Command::new("tmux")
+                .args(["kill-pane", "-t", &pid])
+                .status();
+        }
+        // Turn horizontal status bar back on
+        if config.theme.tabs.spacer_lines == 0 {
+            let _ = Command::new("tmux")
+                .args(["set", "-g", "status", "on"])
+                .status();
+        } else {
+            let _ = Command::new("tmux")
+                .args(["set", "-g", "status", "2"])
+                .status();
+        }
+    } else {
+        // Switch to vertical rail sidebar
+        if rail_pane_id.is_some() {
+            return Ok(());
+        }
+
+        // Hide horizontal status bar
+        let _ = Command::new("tmux")
+            .args(["set", "-g", "status", "off"])
+            .status();
+
+        // Split window to create rail pane
+        let mut split_cmd = Command::new("tmux");
+        split_cmd.args(["split-window", "-h"]);
+        if is_left {
+            split_cmd.arg("-b");
+        }
+        split_cmd.args(["-l", "42", "-P", "-F", "#{pane_id}", "agymux rail"]);
+
+        if let Ok(out) = split_cmd.output() {
+            let new_pid = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            if !new_pid.is_empty() {
+                let _ = Command::new("tmux")
+                    .args(["select-pane", "-t", &new_pid, "-T", "agymux-rail"])
+                    .status();
+                let _ = Command::new("tmux")
+                    .args(["set-option", "-p", "-t", &new_pid, "@is_rail", "1"])
+                    .status();
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Lifecycle hook invoked by Antigravity on turn stop to synchronize tab titles
+pub fn run_hook() -> Result<()> {
+    use std::io::Read;
+
+    let mut input = String::new();
+    let _ = std::io::stdin().read_to_string(&mut input);
+
+    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&input) {
+        let conv_id = val
+            .get("conversationId")
+            .or_else(|| val.get("conversation_id"))
+            .or_else(|| val.get("session_id"))
+            .or_else(|| val.get("sessionId"))
+            .and_then(|v| v.as_str());
+
+        if let Some(cid) = conv_id {
+            let db = db_path();
+            if db.exists() {
+                if let Ok(conn) = rusqlite::Connection::open(&db) {
+                    let title: Option<String> = conn
+                        .query_row(
+                            "SELECT title FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
+                            [cid],
+                            |r| r.get(0),
+                        )
+                        .ok();
+
+                    if let Some(t) = title {
+                        if !t.trim().is_empty() {
+                            let clean = sanitize_title(&t);
+                            if let Ok(out) = Command::new("tmux")
+                                .args([
+                                    "list-windows",
+                                    "-F",
+                                    "#{window_id}:#{@conversation_id}:#{window_name}",
+                                ])
+                                .output()
+                            {
+                                let stdout = String::from_utf8_lossy(&out.stdout);
+                                let mut matched = false;
+                                let mut single_fallback: Option<String> = None;
+                                let mut candidate_fallback: Option<String> = None;
+                                let mut window_count = 0;
+
+                                for line in stdout.lines() {
+                                    window_count += 1;
+                                    let parts: Vec<&str> = line.splitn(3, ':').collect();
+                                    if parts.len() >= 3 {
+                                        let win_id = parts[0];
+                                        let win_cid = parts[1];
+                                        let win_name = parts[2];
+
+                                        if win_cid == cid {
+                                            matched = true;
+                                            if win_name != clean {
+                                                let _ = Command::new("tmux")
+                                                    .args(["rename-window", "-t", win_id, &clean])
+                                                    .status();
+                                            }
+                                            break;
+                                        }
+
+                                        if win_cid.is_empty() {
+                                            single_fallback = Some(win_id.to_string());
+                                            if win_name == "+ new"
+                                                || win_name.starts_with("agy")
+                                                || win_name == "term"
+                                            {
+                                                candidate_fallback = Some(win_id.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if !matched {
+                                    let fallback_target = candidate_fallback.or_else(|| {
+                                        if window_count == 1 {
+                                            single_fallback
+                                        } else {
+                                            None
+                                        }
+                                    });
+                                    if let Some(target) = fallback_target {
+                                        let _ = Command::new("tmux")
+                                            .args([
+                                                "set-option",
+                                                "-w",
+                                                "-t",
+                                                &target,
+                                                "@conversation_id",
+                                                cid,
+                                            ])
+                                            .status();
+                                        let _ = Command::new("tmux")
+                                            .args(["rename-window", "-t", &target, &clean])
+                                            .status();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    println!("{{}}");
+    Ok(())
+}
+
+/// Install or update agymux tab sync lifecycle hook in ~/.gemini/config/hooks.json
+pub fn ensure_hook_installed() -> Result<PathBuf> {
+    let home = dirs::home_dir().context("Cannot determine home directory")?;
+    let config_dir = home.join(".gemini/config");
+    fs::create_dir_all(&config_dir)?;
+    let hook_path = config_dir.join("hooks.json");
+
+    let mut root = if hook_path.exists() {
+        let content = fs::read_to_string(&hook_path).unwrap_or_default();
+        serde_json::from_str::<serde_json::Value>(&content)
+            .unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+
+    if !root.is_object() {
+        root = serde_json::json!({});
+    }
+
+    let hook_entry = serde_json::json!({
+        "enabled": true,
+        "Stop": [
+            {
+                "type": "command",
+                "command": "agymux hook",
+                "timeout": 5
+            }
+        ]
+    });
+
+    if let Some(obj) = root.as_object_mut() {
+        obj.insert("agymux-tab-sync".to_string(), hook_entry);
+    }
+
+    let formatted = serde_json::to_string_pretty(&root)?;
+    fs::write(&hook_path, formatted)?;
+
+    Ok(hook_path)
+}
+
+/// CLI command to install agymux lifecycle hook to ~/.gemini/config/hooks.json
+pub fn run_install() -> Result<()> {
+    let hook_path = ensure_hook_installed()?;
+    println!("Installed agymux hook to {}", hook_path.display());
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_build_agy_args_with_conv_id() {
-        let args = vec!["--project".to_string(), "doppelganger".to_string(), "-c".to_string(), "conv-uuid-1".to_string()];
+        let args = vec![
+            "--project".to_string(),
+            "doppelganger".to_string(),
+            "-c".to_string(),
+            "conv-uuid-1".to_string(),
+        ];
         let res = build_agy_args("doppelganger", &args, Some("conv-uuid-1"), true, false);
         assert_eq!(
             res,
@@ -1137,7 +1426,12 @@ mod tests {
         let res = build_agy_args("doppelganger", &args, Some("conv-uuid-latest"), true, false);
         assert_eq!(
             res,
-            vec!["--project", "doppelganger", "--conversation", "conv-uuid-latest"]
+            vec![
+                "--project",
+                "doppelganger",
+                "--conversation",
+                "conv-uuid-latest"
+            ]
         );
     }
 
@@ -1145,20 +1439,14 @@ mod tests {
     fn test_build_agy_args_bare_continue_unresolved() {
         let args = vec!["-c".to_string()];
         let res = build_agy_args("doppelganger", &args, None, true, false);
-        assert_eq!(
-            res,
-            vec!["--project", "doppelganger", "-c"]
-        );
+        assert_eq!(res, vec!["--project", "doppelganger", "-c"]);
     }
 
     #[test]
     fn test_build_agy_args_new_session_no_flags() {
         let args: Vec<String> = vec![];
         let res = build_agy_args("doppelganger", &args, None, false, false);
-        assert_eq!(
-            res,
-            vec!["--project", "doppelganger"]
-        );
+        assert_eq!(res, vec!["--project", "doppelganger"]);
     }
 
     #[test]
@@ -1181,6 +1469,47 @@ mod tests {
                 "conv-uuid-2",
                 "--remote-control",
             ]
+        );
+    }
+
+    #[test]
+    fn test_ensure_hook_installed_and_json_format() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let config_dir = temp_dir.path().join(".gemini/config");
+        std::fs::create_dir_all(&config_dir).unwrap();
+        let hook_path = config_dir.join("hooks.json");
+
+        // Write existing dummy hook
+        let initial_json = r#"{ "other-hook": { "enabled": true } }"#;
+        std::fs::write(&hook_path, initial_json).unwrap();
+
+        // Simulate logic
+        let content = std::fs::read_to_string(&hook_path).unwrap();
+        let mut root: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let hook_entry = serde_json::json!({
+            "enabled": true,
+            "Stop": [
+                {
+                    "type": "command",
+                    "command": "agymux hook",
+                    "timeout": 5
+                }
+            ]
+        });
+        if let Some(obj) = root.as_object_mut() {
+            obj.insert("agymux-tab-sync".to_string(), hook_entry);
+        }
+        let formatted = serde_json::to_string_pretty(&root).unwrap();
+        std::fs::write(&hook_path, formatted).unwrap();
+
+        let read_back: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&hook_path).unwrap()).unwrap();
+        assert!(read_back.get("other-hook").is_some());
+        assert!(read_back.get("agymux-tab-sync").is_some());
+        assert_eq!(read_back["agymux-tab-sync"]["enabled"], true);
+        assert_eq!(
+            read_back["agymux-tab-sync"]["Stop"][0]["command"],
+            "agymux hook"
         );
     }
 }

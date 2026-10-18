@@ -270,7 +270,8 @@ impl SessionDb {
                 format!("WHERE {}", hygiene.join(" AND "))
             };
 
-            let sql = format!("
+            let sql = format!(
+                "
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(summary, ''), 'Untitled') AS title_clean,
                        project_uri,
@@ -283,7 +284,9 @@ impl SessionDb {
                 {}
                 ORDER BY epoch_sec DESC
                 LIMIT 200;
-            ", where_clause);
+            ",
+                where_clause
+            );
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map([], |row| {
                 let id: String = row.get(0)?;
@@ -315,7 +318,8 @@ impl SessionDb {
                 format!("WHERE {}", hygiene.join(" AND "))
             };
 
-            let sql = format!("
+            let sql = format!(
+                "
                 SELECT conversation_id,
                        COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled') AS title_clean,
                        workspace_uris,
@@ -328,7 +332,9 @@ impl SessionDb {
                 {}
                 ORDER BY epoch_sec DESC
                 LIMIT 200;
-            ", where_clause);
+            ",
+                where_clause
+            );
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map([], |row| {
                 let id: String = row.get(0)?;
@@ -360,7 +366,8 @@ impl SessionDb {
 
 /// Check if a specific table exists in the database
 pub fn table_exists(conn: &Connection, table_name: &str) -> bool {
-    let mut stmt = match conn.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1") {
+    let mut stmt = match conn.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1")
+    {
         Ok(s) => s,
         Err(_) => return false,
     };
@@ -402,7 +409,9 @@ pub fn session_hygiene_conditions(conn: &Connection, table_name: &str) -> Vec<St
             );
         }
         (true, false) => {
-            filters.push("(parent_conversation_id IS NULL OR parent_conversation_id = '')".to_string());
+            filters.push(
+                "(parent_conversation_id IS NULL OR parent_conversation_id = '')".to_string(),
+            );
         }
         (false, true) => {
             filters.push("(nesting_depth IS NULL OR nesting_depth = 0)".to_string());
@@ -427,7 +436,10 @@ pub fn session_hygiene_conditions(conn: &Connection, table_name: &str) -> Vec<St
 
     if has_step_count {
         if !non_empty_content.is_empty() {
-            filters.push(format!("(step_count > 0 OR {})", non_empty_content.join(" OR ")));
+            filters.push(format!(
+                "(step_count > 0 OR {})",
+                non_empty_content.join(" OR ")
+            ));
         } else {
             filters.push("(step_count > 0)".to_string());
         }
@@ -458,11 +470,9 @@ pub fn latest_conversation_id(conn: &Connection, project: Option<&str>) -> Optio
             "SELECT conversation_id FROM conversation_summaries WHERE (workspace_uris LIKE ?1 OR project_id = ?2){} ORDER BY last_modified_time DESC LIMIT 1",
             hygiene_and
         );
-        if let Ok(id) = conn.query_row(
-            &sql_project,
-            rusqlite::params![pattern, proj],
-            |r| r.get::<_, String>(0),
-        ) {
+        if let Ok(id) = conn.query_row(&sql_project, rusqlite::params![pattern, proj], |r| {
+            r.get::<_, String>(0)
+        }) {
             return Some(id);
         }
     }
@@ -471,15 +481,15 @@ pub fn latest_conversation_id(conn: &Connection, project: Option<&str>) -> Optio
         "SELECT conversation_id FROM conversation_summaries {} ORDER BY last_modified_time DESC LIMIT 1",
         hygiene_where
     );
-    conn.query_row(
-        &sql_global,
-        [],
-        |r| r.get::<_, String>(0),
-    ).ok()
+    conn.query_row(&sql_global, [], |r| r.get::<_, String>(0))
+        .ok()
 }
 
 /// Query current step count and last modified epoch for a conversation (from SQLite and transcript file)
-pub fn get_conversation_mtime_and_steps(db_conn: Option<&Connection>, conv_id: &str) -> (Option<i64>, Option<i64>) {
+pub fn get_conversation_mtime_and_steps(
+    db_conn: Option<&Connection>,
+    conv_id: &str,
+) -> (Option<i64>, Option<i64>) {
     let mut step_count = None;
     let mut last_modified_epoch = None;
 
@@ -504,7 +514,9 @@ pub fn get_conversation_mtime_and_steps(db_conn: Option<&Connection>, conv_id: &
         let brain_dir = dirs::home_dir()
             .unwrap_or_default()
             .join(".gemini/antigravity-cli/brain");
-        let p1 = brain_dir.join(conv_id).join(".system_generated/logs/transcript.jsonl");
+        let p1 = brain_dir
+            .join(conv_id)
+            .join(".system_generated/logs/transcript.jsonl");
         if let Ok(meta) = std::fs::metadata(&p1) {
             if let Ok(modified) = meta.modified() {
                 if let Ok(dur) = modified.duration_since(std::time::UNIX_EPOCH) {
@@ -761,9 +773,18 @@ mod tests {
         assert!(returned_ids.contains(&"null-parent".to_string()));
 
         // Crucial assertions: subagents and abandoned sessions are excluded
-        assert!(!returned_ids.contains(&"sub-1".to_string()), "sub-1 with parent_conversation_id must be excluded");
-        assert!(!returned_ids.contains(&"sub-2".to_string()), "sub-2 with nesting_depth > 0 must be excluded");
-        assert!(!returned_ids.contains(&"abandoned-1".to_string()), "abandoned-1 with 0 steps and empty title/preview must be excluded");
+        assert!(
+            !returned_ids.contains(&"sub-1".to_string()),
+            "sub-1 with parent_conversation_id must be excluded"
+        );
+        assert!(
+            !returned_ids.contains(&"sub-2".to_string()),
+            "sub-2 with nesting_depth > 0 must be excluded"
+        );
+        assert!(
+            !returned_ids.contains(&"abandoned-1".to_string()),
+            "abandoned-1 with 0 steps and empty title/preview must be excluded"
+        );
 
         let local = db
             .get_local_conversations(Path::new("/home/user/projects/proj"))

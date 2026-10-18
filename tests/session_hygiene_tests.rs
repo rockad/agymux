@@ -66,13 +66,28 @@ fn test_integration_subagent_exclusion_in_global_conversations() {
     let ids: Vec<String> = global.into_iter().map(|item| item.id).collect();
 
     // Subagents must NOT be returned
-    assert!(!ids.contains(&"subagent-child-1".to_string()), "Subagent with parent_conversation_id must be excluded");
-    assert!(!ids.contains(&"subagent-grandchild".to_string()), "Nested subagent must be excluded");
-    assert!(!ids.contains(&"abandoned-ghost".to_string()), "Abandoned 0-step session must be excluded");
+    assert!(
+        !ids.contains(&"subagent-child-1".to_string()),
+        "Subagent with parent_conversation_id must be excluded"
+    );
+    assert!(
+        !ids.contains(&"subagent-grandchild".to_string()),
+        "Nested subagent must be excluded"
+    );
+    assert!(
+        !ids.contains(&"abandoned-ghost".to_string()),
+        "Abandoned 0-step session must be excluded"
+    );
 
     // Root sessions and active new turns must be included
-    assert!(ids.contains(&"root-alpha".to_string()), "Root session must be returned");
-    assert!(ids.contains(&"active-new-turn".to_string()), "Active session with prompt title must be returned");
+    assert!(
+        ids.contains(&"root-alpha".to_string()),
+        "Root session must be returned"
+    );
+    assert!(
+        ids.contains(&"active-new-turn".to_string()),
+        "Active session with prompt title must be returned"
+    );
     assert_eq!(ids.len(), 2);
 }
 
@@ -112,7 +127,9 @@ fn test_integration_subagent_exclusion_in_local_conversations() {
     .unwrap();
 
     let db = SessionDb::from_connection(conn);
-    let local = db.get_local_conversations(Path::new("/home/user/projects/proj-a")).unwrap();
+    let local = db
+        .get_local_conversations(Path::new("/home/user/projects/proj-a"))
+        .unwrap();
     let local_ids: Vec<String> = local.into_iter().map(|item| item.id).collect();
 
     assert_eq!(local_ids, vec!["root-proj-a"]);
@@ -148,7 +165,9 @@ fn test_integration_graceful_missing_columns() {
     assert_eq!(global.len(), 1);
     assert_eq!(global[0].id, "legacy-conv-1");
 
-    let local = db.get_local_conversations(Path::new("/home/user/projects/agymux")).unwrap();
+    let local = db
+        .get_local_conversations(Path::new("/home/user/projects/agymux"))
+        .unwrap();
     assert_eq!(local.len(), 1);
     assert_eq!(local[0].id, "legacy-conv-1");
 }

@@ -31,6 +31,7 @@ pub enum PaletteAction {
     NewTerminalTab,
     SwitchToMain,
     ReloadActiveSession,
+    ToggleIdeLayout,
 }
 
 #[derive(Debug, Clone)]
@@ -140,6 +141,12 @@ impl PaletteItem {
                 title: "Switch to Main Terminal (main)",
                 shortcut: "Ctrl+Space m / ь",
             },
+            PaletteItem {
+                action: PaletteAction::ToggleIdeLayout,
+                icon: "📑",
+                title: "Toggle IDE Sidebar Layout",
+                shortcut: "Ctrl+Space B / И",
+            },
         ]
     }
 }
@@ -190,7 +197,11 @@ impl PaletteState {
                         "quit".contains(&q) || "exit".contains(&q) || q == "q" || q == "й"
                     }
                     PaletteAction::KillSession => {
-                        "kill".contains(&q) || "terminate".contains(&q) || "stop".contains(&q) || q == "q" || q == "й"
+                        "kill".contains(&q)
+                            || "terminate".contains(&q)
+                            || "stop".contains(&q)
+                            || q == "q"
+                            || q == "й"
                     }
                     PaletteAction::Detach => "detach".contains(&q),
                     PaletteAction::BindConversation => {
@@ -212,6 +223,14 @@ impl PaletteState {
                             || "resume".contains(&q)
                             || q == "r"
                             || q == "к"
+                    }
+                    PaletteAction::ToggleIdeLayout => {
+                        "layout".contains(&q)
+                            || "sidebar".contains(&q)
+                            || "rail".contains(&q)
+                            || "ide".contains(&q)
+                            || q == "b"
+                            || q == "и"
                     }
                     _ => false,
                 }
@@ -592,6 +611,12 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                 .status();
         }
         PaletteAction::ReloadActiveSession => {
+            if std::env::var("TMUX").is_ok() {
+                let _ = Command::new("tmux")
+                    .args(["set-option", "-w", "@external_sync", "0"])
+                    .status();
+            }
+
             let cid_output = Command::new("tmux")
                 .args(["display-message", "-p", "#{@conversation_id}"])
                 .output();
@@ -620,7 +645,10 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                 } else {
                     ""
                 };
-                let reload_cmd = format!("agymux run --project '{}' --conversation '{}'{}", proj, cid, rc_flag);
+                let reload_cmd = format!(
+                    "agymux run --project '{}' --conversation '{}'{}",
+                    proj, cid, rc_flag
+                );
 
                 if std::env::var("TMUX").is_ok() {
                     let _ = Command::new("tmux")
@@ -646,6 +674,9 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
             } else {
                 println!("No active conversation bound to reload");
             }
+        }
+        PaletteAction::ToggleIdeLayout => {
+            crate::run_layout(None)?;
         }
     }
     Ok(())

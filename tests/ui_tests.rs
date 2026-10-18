@@ -40,6 +40,7 @@ fn test_helper_modal_render_and_scroll() {
     assert!(rendered_text.contains("CONVERSATION & WORKTREE LIFECYCLE"));
     assert!(rendered_text.contains("Ctrl+Space 1..9"));
     assert!(rendered_text.contains("Ctrl+Space c  /  с"));
+    assert!(rendered_text.contains("MOUSE CONTROLS") || rendered_text.contains("Toggle IDE"));
 
     // Test scrolling logic
     assert_eq!(state.scroll, 0);
@@ -62,7 +63,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 16);
+    assert_eq!(state.items.len(), 17);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -93,7 +94,10 @@ fn test_palette_modal_render_and_fuzzy_filter() {
             &mut state,
         );
     }
-    assert_eq!(state.selected_action(), Some(PaletteAction::ReloadActiveSession));
+    assert_eq!(
+        state.selected_action(),
+        Some(PaletteAction::ReloadActiveSession)
+    );
 
     // Test query for "quit" / "exit" finds QuitKeepTabs
     state.query.clear();

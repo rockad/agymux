@@ -36,8 +36,9 @@ fn test_cli_remote_control_flags() {
     }
 
     // Run command with forwarded trailing flag after --
-    let cli_run_forwarded = Cli::try_parse_from(["agymux", "run", "--", "--remote-control", "-c", "cid-123"])
-        .expect("parsing succeeds");
+    let cli_run_forwarded =
+        Cli::try_parse_from(["agymux", "run", "--", "--remote-control", "-c", "cid-123"])
+            .expect("parsing succeeds");
     match cli_run_forwarded.command {
         Some(Commands::Run { args }) => {
             assert!(args.contains(&"--remote-control".to_string()));
@@ -47,8 +48,8 @@ fn test_cli_remote_control_flags() {
     }
 
     // Attach command with forwarded --remote-control
-    let cli_attach =
-        Cli::try_parse_from(["agymux", "attach", "--", "--remote-control"]).expect("parsing succeeds");
+    let cli_attach = Cli::try_parse_from(["agymux", "attach", "--", "--remote-control"])
+        .expect("parsing succeeds");
     match cli_attach.command {
         Some(Commands::Attach { args }) => {
             assert!(args.contains(&"--remote-control".to_string()));
@@ -63,7 +64,10 @@ fn test_palette_reload_active_session() {
     let reload_item = items
         .iter()
         .find(|item| item.action == PaletteAction::ReloadActiveSession);
-    assert!(reload_item.is_some(), "ReloadActiveSession must be in PaletteItem::all()");
+    assert!(
+        reload_item.is_some(),
+        "ReloadActiveSession must be in PaletteItem::all()"
+    );
     let item = reload_item.unwrap();
     assert!(item.title.contains("Reload active session"));
     assert!(item.shortcut.contains("R / К"));
@@ -188,11 +192,15 @@ fn test_watcher_phase1_bound_id_exclusion() {
     .unwrap();
 
     // Query mimicking Phase 1 with bound_ids containing cid-tab2:
-    let bound_ids: std::collections::HashSet<String> = vec!["cid-tab2".to_string()].into_iter().collect();
-    let placeholders: Vec<String> = (0..bound_ids.len()).map(|i| format!("?{}", i + 4)).collect();
+    let bound_ids: std::collections::HashSet<String> =
+        vec!["cid-tab2".to_string()].into_iter().collect();
+    let placeholders: Vec<String> = (0..bound_ids.len())
+        .map(|i| format!("?{}", i + 4))
+        .collect();
     let bound_clause = format!(" AND conversation_id NOT IN ({})", placeholders.join(","));
 
-    let sql = format!("
+    let sql = format!(
+        "
         SELECT conversation_id, title 
         FROM conversation_summaries 
         WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
@@ -200,25 +208,25 @@ fn test_watcher_phase1_bound_id_exclusion() {
           AND title IS NOT NULL AND title != ''{}
         ORDER BY last_modified_time DESC 
         LIMIT 1;
-    ", bound_clause);
+    ",
+        bound_clause
+    );
 
     let mut stmt = conn.prepare(&sql).unwrap();
     let pattern = "%my-proj%".to_string();
     let proj = "my-proj".to_string();
     let start_time = "2026-10-13 13:50:00".to_string();
-    let mut params: Vec<rusqlite::types::Value> = vec![
-        pattern.into(),
-        proj.into(),
-        start_time.into(),
-    ];
+    let mut params: Vec<rusqlite::types::Value> =
+        vec![pattern.into(), proj.into(), start_time.into()];
     for id in bound_ids {
         params.push(id.into());
     }
 
-    let (cid, title): (String, String) = stmt.query_row(
-        rusqlite::params_from_iter(params.iter()),
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    ).unwrap();
+    let (cid, title): (String, String) = stmt
+        .query_row(rusqlite::params_from_iter(params.iter()), |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
 
     // Because cid-tab2 was in bound_ids, it selected cid-tab1 instead!
     assert_eq!(cid, "cid-tab1");
@@ -228,7 +236,13 @@ fn test_watcher_phase1_bound_id_exclusion() {
 #[test]
 fn test_sanitize_title_length_and_characters() {
     assert_eq!(agymux::sanitize_title("Short"), "Short");
-    assert_eq!(agymux::sanitize_title("This is a title that is quite long and descriptive"), "This is a title that is quite");
+    assert_eq!(
+        agymux::sanitize_title("This is a title that is quite long and descriptive"),
+        "This is a title that is quite"
+    );
     assert_eq!(agymux::sanitize_title("   "), "agy");
-    assert_eq!(agymux::sanitize_title("Hello / World : Test !"), "Hello  World  Test");
+    assert_eq!(
+        agymux::sanitize_title("Hello / World : Test !"),
+        "Hello  World  Test"
+    );
 }

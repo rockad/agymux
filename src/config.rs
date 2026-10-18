@@ -13,6 +13,8 @@ pub struct Config {
     pub keybindings: KeybindingsConfig,
     #[serde(default)]
     pub tmux: TmuxConfig,
+    #[serde(default)]
+    pub tabs: Option<TabsConfig>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -88,6 +90,71 @@ pub struct ThemeConfig {
     pub window_status_format: Option<String>,
     #[serde(default)]
     pub window_status_current_format: Option<String>,
+    #[serde(default)]
+    pub tabs: TabsConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabsConfig {
+    #[serde(default = "default_tab_position")]
+    pub position: String,
+    #[serde(default = "default_tab_layout")]
+    pub layout: String,
+    #[serde(default = "default_sidebar_position")]
+    pub sidebar_position: String,
+    #[serde(default = "default_spacer_lines")]
+    pub spacer_lines: usize,
+    #[serde(default = "default_tab_alignment")]
+    pub alignment: String,
+    #[serde(default = "default_true")]
+    pub show_close_button: bool,
+    #[serde(default = "default_min_width")]
+    pub min_width: usize,
+    #[serde(default = "default_standard_width")]
+    pub standard_width: usize,
+    #[serde(default = "default_max_width")]
+    pub max_width: usize,
+}
+
+fn default_tab_position() -> String {
+    "top".to_string()
+}
+fn default_tab_layout() -> String {
+    "horizontal".to_string()
+}
+fn default_sidebar_position() -> String {
+    "left".to_string()
+}
+fn default_spacer_lines() -> usize {
+    1
+}
+fn default_tab_alignment() -> String {
+    "left".to_string()
+}
+fn default_min_width() -> usize {
+    8
+}
+fn default_standard_width() -> usize {
+    22
+}
+fn default_max_width() -> usize {
+    30
+}
+
+impl Default for TabsConfig {
+    fn default() -> Self {
+        Self {
+            position: default_tab_position(),
+            layout: default_tab_layout(),
+            sidebar_position: default_sidebar_position(),
+            spacer_lines: default_spacer_lines(),
+            alignment: default_tab_alignment(),
+            show_close_button: default_true(),
+            min_width: default_min_width(),
+            standard_width: default_standard_width(),
+            max_width: default_max_width(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -155,6 +222,7 @@ impl Default for ThemeConfig {
             status_right: None,
             window_status_format: None,
             window_status_current_format: None,
+            tabs: TabsConfig::default(),
         }
     }
 }
@@ -190,8 +258,11 @@ impl Config {
 
         let content = fs::read_to_string(&path)
             .with_context(|| format!("Failed to read config file at {:?}", path))?;
-        let config: Config = toml::from_str(&content)
+        let mut config: Config = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config TOML at {:?}", path))?;
+        if let Some(tabs) = config.tabs.take() {
+            config.theme.tabs = tabs;
+        }
         Ok(config)
     }
 
@@ -402,5 +473,45 @@ default_effort = "low"
         let loaded: Config = toml::from_str(&fs::read_to_string(&file_path).unwrap()).unwrap();
         assert_eq!(loaded.general.startup_action, StartupAction::Terminal);
         assert!(loaded.theme.rounded_pills);
+    }
+
+    #[test]
+    fn test_tabs_config_defaults() {
+        let tabs = TabsConfig::default();
+        assert_eq!(tabs.position, "top");
+        assert_eq!(tabs.layout, "horizontal");
+        assert_eq!(tabs.sidebar_position, "left");
+        assert_eq!(tabs.spacer_lines, 1);
+        assert_eq!(tabs.alignment, "left");
+        assert!(tabs.show_close_button);
+        assert_eq!(tabs.min_width, 8);
+        assert_eq!(tabs.standard_width, 22);
+        assert_eq!(tabs.max_width, 30);
+    }
+
+    #[test]
+    fn test_tabs_config_deserialize_theme_tabs() {
+        let toml_str = r#"
+[theme.tabs]
+position = "bottom"
+layout = "vertical"
+sidebar_position = "right"
+spacer_lines = 0
+alignment = "centre"
+show_close_button = false
+min_width = 10
+standard_width = 24
+max_width = 35
+"#;
+        let config: Config = toml::from_str(toml_str).expect("custom tabs toml parses");
+        assert_eq!(config.theme.tabs.position, "bottom");
+        assert_eq!(config.theme.tabs.layout, "vertical");
+        assert_eq!(config.theme.tabs.sidebar_position, "right");
+        assert_eq!(config.theme.tabs.spacer_lines, 0);
+        assert_eq!(config.theme.tabs.alignment, "centre");
+        assert!(!config.theme.tabs.show_close_button);
+        assert_eq!(config.theme.tabs.min_width, 10);
+        assert_eq!(config.theme.tabs.standard_width, 24);
+        assert_eq!(config.theme.tabs.max_width, 35);
     }
 }
