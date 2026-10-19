@@ -251,6 +251,19 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
             return Ok(());
         }
 
+        let status_val = if config.theme.tabs.spacer_lines == 0 {
+            "on"
+        } else {
+            "2"
+        };
+        let effective_position = if config.theme.tabs.position != "top" {
+            &config.theme.tabs.position
+        } else if config.theme.status_position != "top" {
+            &config.theme.status_position
+        } else {
+            "top"
+        };
+
         let conf_path = crate::tmux::TmuxProfile::generate(config, name)?;
         let dir_str = dir.to_string_lossy();
         let win = window_name.unwrap_or("+ new");
@@ -264,6 +277,19 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         let _ = self
             .runner
             .run(&["source-file", &conf_path.to_string_lossy()]);
+
+        // Remove any leftover `status off` in tmux server and guarantee top tab bar is ALWAYS visible in new sessions
+        let _ = self.runner.run(&["set", "-g", "status", status_val]);
+        let _ = self
+            .runner
+            .run(&["set", "-g", "status-position", effective_position]);
+        let _ = self
+            .runner
+            .run(&["set", "-t", name, "status", status_val]);
+        let _ = self
+            .runner
+            .run(&["set", "-t", name, "status-position", effective_position]);
+
         let _ = self
             .runner
             .run(&["select-window", "-t", &format!("{}:1", name)]);

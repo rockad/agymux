@@ -70,7 +70,7 @@ fn test_palette_reload_active_session() {
     );
     let item = reload_item.unwrap();
     assert!(item.title.contains("Reload active session"));
-    assert!(item.shortcut.contains("R / К"));
+    assert!(item.shortcut.contains("Palette"));
 
     // Verify filter matching
     let mut state = PaletteState::new();
@@ -95,7 +95,7 @@ fn test_palette_reload_active_session() {
         Some(PaletteAction::ReloadActiveSession)
     );
 
-    state.query = "r".to_string();
+    state.query = "resume".to_string();
     state.filter();
     assert_eq!(
         state.selected_action(),

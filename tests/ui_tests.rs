@@ -39,8 +39,8 @@ fn test_helper_modal_render_and_scroll() {
     assert!(rendered_text.contains("TAB NAVIGATION & MOVEMENT"));
     assert!(rendered_text.contains("CONVERSATION & WORKTREE LIFECYCLE"));
     assert!(rendered_text.contains("Ctrl+Space 1..9"));
-    assert!(rendered_text.contains("Ctrl+Space c  /  с"));
-    assert!(rendered_text.contains("MOUSE CONTROLS") || rendered_text.contains("Toggle IDE"));
+    assert!(rendered_text.contains("Ctrl+Space c"));
+    assert!(rendered_text.contains("MODALS & GLOBAL CONTROLS") || rendered_text.contains("Ctrl+Space a"));
 
     // Test scrolling logic
     assert_eq!(state.scroll, 0);

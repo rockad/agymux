@@ -46,10 +46,22 @@ impl PaletteItem {
     pub fn all() -> Vec<Self> {
         vec![
             PaletteItem {
-                action: PaletteAction::ReloadActiveSession,
-                icon: "🔄",
-                title: "Reload active session (-c)",
-                shortcut: "Ctrl+Space R / К",
+                action: PaletteAction::SwitchTab,
+                icon: "🗂️ ",
+                title: "Switch Tab / Session",
+                shortcut: "Ctrl+Space b / и",
+            },
+            PaletteItem {
+                action: PaletteAction::SwitchProject,
+                icon: "🌐",
+                title: "Switch Project",
+                shortcut: "Ctrl+Space p / з",
+            },
+            PaletteItem {
+                action: PaletteAction::NewTab,
+                icon: "➕",
+                title: "New Tab",
+                shortcut: "Ctrl+Space c / с",
             },
             PaletteItem {
                 action: PaletteAction::RenameTab,
@@ -58,10 +70,52 @@ impl PaletteItem {
                 shortcut: "Ctrl+Space r / к",
             },
             PaletteItem {
-                action: PaletteAction::NewTab,
-                icon: "➕",
-                title: "New Tab",
-                shortcut: "Ctrl+Space c / с",
+                action: PaletteAction::CloseTab,
+                icon: "🧹",
+                title: "Close Tab",
+                shortcut: "Ctrl+Space x / ч",
+            },
+            PaletteItem {
+                action: PaletteAction::Detach,
+                icon: "🚪",
+                title: "Detach Session",
+                shortcut: "Ctrl+Space d / в",
+            },
+            PaletteItem {
+                action: PaletteAction::QuitKeepTabs,
+                icon: "🚪",
+                title: "Quit Cockpit (Keep Tabs Running)",
+                shortcut: "Ctrl+Space d / в",
+            },
+            PaletteItem {
+                action: PaletteAction::KillSession,
+                icon: "🛑",
+                title: "Kill Session (Exit Completely)",
+                shortcut: "Ctrl+Space k / л",
+            },
+            PaletteItem {
+                action: PaletteAction::Shortcuts,
+                icon: "❓",
+                title: "Keyboard Shortcuts",
+                shortcut: "Ctrl+Space ? / h / р",
+            },
+            PaletteItem {
+                action: PaletteAction::BindConversation,
+                icon: "🔗",
+                title: "Bind Conversation to Tab",
+                shortcut: "Palette action",
+            },
+            PaletteItem {
+                action: PaletteAction::NewTerminalTab,
+                icon: "💻",
+                title: "New Plain Terminal Tab",
+                shortcut: "Ctrl+Space t / е",
+            },
+            PaletteItem {
+                action: PaletteAction::SwitchToMain,
+                icon: "🖥️ ",
+                title: "Switch to Main Terminal (main)",
+                shortcut: "Ctrl+Space m / ь",
             },
             PaletteItem {
                 action: PaletteAction::ForkConversation,
@@ -82,70 +136,16 @@ impl PaletteItem {
                 shortcut: "Ctrl+Space l / д",
             },
             PaletteItem {
-                action: PaletteAction::CloseTab,
-                icon: "🧹",
-                title: "Close Tab",
-                shortcut: "Ctrl+Space x / ч",
-            },
-            PaletteItem {
-                action: PaletteAction::SwitchTab,
-                icon: "🗂️ ",
-                title: "Switch Tab / Session",
-                shortcut: "Ctrl+Space s / ы",
-            },
-            PaletteItem {
-                action: PaletteAction::SwitchProject,
-                icon: "🌐",
-                title: "Switch Project",
-                shortcut: "Ctrl+Space P / З",
-            },
-            PaletteItem {
-                action: PaletteAction::Shortcuts,
-                icon: "❓",
-                title: "Keyboard Shortcuts",
-                shortcut: "Ctrl+Space ? / h / р",
-            },
-            PaletteItem {
-                action: PaletteAction::Detach,
-                icon: "🚪",
-                title: "Detach Session",
-                shortcut: "Ctrl+Space d / в",
-            },
-            PaletteItem {
-                action: PaletteAction::QuitKeepTabs,
-                icon: "🚪",
-                title: "Quit Cockpit (Keep Tabs Running)",
-                shortcut: "Ctrl+Space q / й",
-            },
-            PaletteItem {
-                action: PaletteAction::KillSession,
-                icon: "🛑",
-                title: "Kill Session (Exit Completely)",
-                shortcut: "Ctrl+Space Q / Й",
-            },
-            PaletteItem {
-                action: PaletteAction::BindConversation,
-                icon: "🔗",
-                title: "Bind Conversation to Tab",
-                shortcut: "Ctrl+Space b / и",
-            },
-            PaletteItem {
-                action: PaletteAction::NewTerminalTab,
-                icon: "💻",
-                title: "New Plain Terminal Tab",
-                shortcut: "Ctrl+Space t / е",
-            },
-            PaletteItem {
-                action: PaletteAction::SwitchToMain,
-                icon: "🖥️ ",
-                title: "Switch to Main Terminal (main)",
-                shortcut: "Ctrl+Space m / ь",
+                action: PaletteAction::ReloadActiveSession,
+                icon: "🔄",
+                title: "Reload active session (-c)",
+                shortcut: "Palette",
             },
             PaletteItem {
                 action: PaletteAction::ToggleIdeLayout,
                 icon: "📑",
                 title: "Toggle IDE Sidebar Layout",
-                shortcut: "Ctrl+Space B / И",
+                shortcut: "Deprecated",
             },
         ]
     }
@@ -200,10 +200,16 @@ impl PaletteState {
                         "kill".contains(&q)
                             || "terminate".contains(&q)
                             || "stop".contains(&q)
-                            || q == "q"
-                            || q == "й"
+                            || q == "k"
+                            || q == "л"
                     }
-                    PaletteAction::Detach => "detach".contains(&q),
+                    PaletteAction::Detach => "detach".contains(&q) || q == "d" || q == "в",
+                    PaletteAction::SwitchTab => {
+                        "switch".contains(&q) || "tab".contains(&q) || q == "b" || q == "и"
+                    }
+                    PaletteAction::SwitchProject => {
+                        "project".contains(&q) || q == "p" || q == "з"
+                    }
                     PaletteAction::BindConversation => {
                         "bind".contains(&q) || "attach".contains(&q) || "connect".contains(&q)
                     }
@@ -212,9 +218,15 @@ impl PaletteState {
                             || "term".contains(&q)
                             || "shell".contains(&q)
                             || "sh".contains(&q)
+                            || q == "t"
+                            || q == "е"
                     }
                     PaletteAction::SwitchToMain => {
-                        "main".contains(&q) || "terminal".contains(&q) || "term".contains(&q)
+                        "main".contains(&q)
+                            || "terminal".contains(&q)
+                            || "term".contains(&q)
+                            || q == "m"
+                            || q == "ь"
                     }
                     PaletteAction::ReloadActiveSession => {
                         "reload".contains(&q)
@@ -229,8 +241,6 @@ impl PaletteState {
                             || "sidebar".contains(&q)
                             || "rail".contains(&q)
                             || "ide".contains(&q)
-                            || q == "b"
-                            || q == "и"
                     }
                     _ => false,
                 }

@@ -48,8 +48,8 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 | **Close Tab** | `Ctrl+Space x` / `ч` | `🧹 Close Tab` |
 | **Quit Cockpit (Keep Tabs)** | `Ctrl+Space q` / `й` | `🚪 Quit Cockpit (Keep Tabs Running)` |
 | **Detach Session** | `Ctrl+Space d` / `в` | `🚪 Detach Session` |
-| **Direct Tab Jump** | `Ctrl+Space 1` .. `9` | N/A |
-| **Cycle Adjacent Tabs** | `Ctrl+Space Left` / `Right` | N/A |
+| **Direct Tab Jump** | `Alt+1` .. `9` / `Ctrl+Space 1` .. `9` | N/A |
+| **Cycle Adjacent Tabs** | `Alt+Left` / `Right` / `Ctrl+Space Left` / `Right` | N/A |
 
 ---
 

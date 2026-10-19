@@ -87,15 +87,15 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
     )]));
     text_lines.push(shortcut_line(
-        "Ctrl+Space 1..9",
+        "Alt+1..9  /  Ctrl+Space 1..9",
         "Jump directly to tab 1..9",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space Left / Right",
+        "Alt+Left/Right  /  Ctrl+Space Left/Right",
         "Cycle to previous / next tab",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space s  /  ы",
+        "Ctrl+Space b  /  B  /  и  /  И",
         "Two-pane tab & conversation switcher",
     ));
     text_lines.push(Line::raw(""));
@@ -106,14 +106,17 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
     )]));
     text_lines.push(shortcut_line(
-        "Ctrl+Space c  /  с",
+        "Ctrl+Space c  /  C  /  с  /  С",
         "New conversation tab in current workspace",
     ));
     text_lines.push(shortcut_line(
         "Ctrl+Space w  /  ц",
         "New git worktree tab (.worktrees/<branch>)",
     ));
-    text_lines.push(shortcut_line("Ctrl+Space r  /  к", "Rename active tab"));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space r  /  R  /  к  /  К",
+        "Rename active tab",
+    ));
     text_lines.push(shortcut_line(
         "Ctrl+Space f  /  а",
         "Fork current conversation into new tab",
@@ -123,15 +126,15 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Launch new tab with custom model / effort flags",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space x  /  ч",
+        "Ctrl+Space x  /  X  /  ч  /  Ч",
         "Close active tab (with confirmation)",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space d  /  в",
+        "Ctrl+Space d  /  D  /  в  /  В",
         "Detach tmux session (leaves agents running)",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space Q  /  Й",
+        "Ctrl+Space k  /  K  /  л  /  Л",
         "Kill session completely (terminates all tabs)",
     ));
     text_lines.push(Line::raw(""));
@@ -142,20 +145,24 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
     )]));
     text_lines.push(shortcut_line(
-        "Ctrl+Space p  /  з",
+        "Ctrl+Space p",
         "Quick Command Palette (all actions menu)",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space P  /  З",
+        "Ctrl+Space P  /  з  /  З",
         "Global Project Switcher",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space ?  /  h  /  р",
+        "Ctrl+Space ?  /  h  /  H  /  р  /  Р",
         "Display this shortcuts cheatsheet",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space B  /  И",
-        "Toggle IDE Sidebar Layout (rail)",
+        "Ctrl+Space t  /  T  /  е  /  Е",
+        "New Plain Terminal Tab",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space m  /  M  /  ь  /  Ь",
+        "Switch to Main Terminal (main)",
     ));
     text_lines.push(Line::raw(""));
 

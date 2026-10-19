@@ -263,6 +263,12 @@ fn handle_attach(
 
     // If session already exists, attach or switch directly
     if tmux::TmuxDriver::session_exists(session_name) {
+        let status_val = if config.theme.tabs.spacer_lines == 0 { "on" } else { "2" };
+        let _ = Command::new("tmux").args(["set", "-g", "status", status_val]).status();
+        let _ = Command::new("tmux").args(["set", "-g", "status-position", "top"]).status();
+        let _ = Command::new("tmux").args(["set", "-t", session_name, "status", status_val]).status();
+        let _ = Command::new("tmux").args(["set", "-t", session_name, "status-position", "top"]).status();
+
         if std::env::var("TMUX").is_ok() {
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
                 if curr_session == session_name {
@@ -443,7 +449,8 @@ pub fn get_bound_conversation_ids(session_name: Option<&str>) -> std::collection
     bound
 }
 
-/// Heal any window with title "+ new" or "agy" where @conversation_id is empty by checking SQLite
+/// Heal an unbound window only when there is unambiguously exactly 1 window in the session
+/// and 1 recent conversation within the last 5 minutes, avoiding cross-window guessing.
 pub fn heal_unbound_windows(project: &str) -> Result<()> {
     if std::env::var("TMUX").is_err() {
         return Ok(());
@@ -466,12 +473,14 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
     };
 
     let stdout = String::from_utf8_lossy(&out.stdout);
+    let mut total_windows = 0;
     let mut unbound_windows = Vec::new();
     let mut bound_ids = std::collections::HashSet::new();
 
     for line in stdout.lines() {
         let parts: Vec<&str> = line.split('\t').collect();
         if parts.len() >= 3 {
+            total_windows += 1;
             let win_id = parts[0];
             let win_name = parts[1];
             let conv_id = parts[2];
@@ -483,9 +492,13 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
         }
     }
 
-    if unbound_windows.is_empty() {
+    // Only heal if there is unambiguously exactly 1 window in the session and it is unbound.
+    // Avoid guessing or popping across multiple windows which causes title swapping.
+    if total_windows != 1 || unbound_windows.len() != 1 {
         return Ok(());
     }
+
+    let win_id = &unbound_windows[0];
 
     let db = db_path();
     if !db.exists() {
@@ -501,38 +514,28 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
             format!(" AND {}", hygiene.join(" AND "))
         };
         let pattern = format!("%{}%", project);
+        // Only consider conversation updated within the last 5 minutes (300 seconds)
         let sql = format!(
             "SELECT conversation_id, title FROM conversation_summaries 
              WHERE (workspace_uris LIKE ?1 OR project_id = ?2) 
-               AND title IS NOT NULL AND title != ''{} 
-             ORDER BY last_modified_time DESC LIMIT 10",
+               AND title IS NOT NULL AND title != ''
+               AND (strftime('%s', 'now') - strftime('%s', last_modified_time)) < 300{} 
+             ORDER BY last_modified_time DESC LIMIT 1",
             hygiene_and
         );
-        let mut stmt = match conn.prepare(&sql) {
-            Ok(s) => s,
-            Err(_) => return Ok(()),
-        };
 
-        let rows = stmt.query_map(rusqlite::params![pattern, project], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-        });
-
-        if let Ok(candidates) = rows {
-            for (cid, title) in candidates.flatten() {
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            if let Ok((cid, title)) = stmt.query_row(rusqlite::params![pattern, project], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            }) {
                 if !bound_ids.contains(&cid) {
-                    if let Some(win_id) = unbound_windows.pop() {
-                        let _ = Command::new("tmux")
-                            .args(["set-option", "-w", "-t", &win_id, "@conversation_id", &cid])
-                            .status();
-                        let clean = sanitize_title(&title);
-                        let _ = Command::new("tmux")
-                            .args(["rename-window", "-t", &win_id, &clean])
-                            .status();
-                        bound_ids.insert(cid);
-                    }
-                }
-                if unbound_windows.is_empty() {
-                    break;
+                    let _ = Command::new("tmux")
+                        .args(["set-option", "-w", "-t", win_id, "@conversation_id", &cid])
+                        .status();
+                    let clean = sanitize_title(&title);
+                    let _ = Command::new("tmux")
+                        .args(["rename-window", "-t", win_id, &clean])
+                        .status();
                 }
             }
         }
@@ -1154,19 +1157,21 @@ fn run_ls() -> Result<()> {
     Ok(())
 }
 
-/// Toggle or set cockpit layout mode (horizontal status tabs vs IDE vertical sidebar rail)
-pub fn run_layout(mode: Option<&str>) -> Result<()> {
+/// Toggle or set cockpit layout mode (deprecated in favor of top tab bar)
+pub fn run_layout(_mode: Option<&str>) -> Result<()> {
     if std::env::var("TMUX").is_err() {
-        println!("agymux layout toggle only operates inside tmux sessions.");
+        println!("agymux: Vertical sidebar rail is deprecated in favor of the top tab bar.");
         return Ok(());
     }
 
     let config = Config::load().unwrap_or_default();
-    let sidebar_pos = config.theme.tabs.sidebar_position.to_lowercase();
-    let is_left = sidebar_pos != "right";
+    let status_val = if config.theme.tabs.spacer_lines == 0 {
+        "on"
+    } else {
+        "2"
+    };
 
-    // Check if rail pane currently exists in the current window
-    let mut rail_pane_id: Option<String> = None;
+    // Kill any lingering rail pane if present
     if let Ok(output) = Command::new("tmux")
         .args(["list-panes", "-F", "#{pane_id}:#{pane_title}:#{@is_rail}"])
         .output()
@@ -1179,68 +1184,26 @@ pub fn run_layout(mode: Option<&str>) -> Result<()> {
                 let title = parts[1];
                 let is_rail = parts.get(2).copied().unwrap_or("");
                 if title == "agymux-rail" || is_rail == "1" {
-                    rail_pane_id = Some(pid.to_string());
-                    break;
+                    let _ = Command::new("tmux").args(["kill-pane", "-t", pid]).status();
                 }
             }
         }
     }
 
-    let switch_to_horizontal = match mode {
-        Some("horizontal") | Some("tabs") => true,
-        Some("vertical") | Some("rail") | Some("sidebar") => false,
-        _ => rail_pane_id.is_some(), // toggle: if rail pane exists, switch to horizontal; else vertical
-    };
+    // Guarantee horizontal top tab bar is ALWAYS enabled; NEVER set status off globally!
+    let _ = Command::new("tmux").args(["set", "-g", "status", status_val]).status();
+    let _ = Command::new("tmux").args(["set", "-g", "status-position", "top"]).status();
+    let _ = Command::new("tmux").args(["set", "status", status_val]).status();
+    let _ = Command::new("tmux").args(["set", "status-position", "top"]).status();
 
-    if switch_to_horizontal {
-        // Kill rail pane if present
-        if let Some(pid) = rail_pane_id {
-            let _ = Command::new("tmux")
-                .args(["kill-pane", "-t", &pid])
-                .status();
-        }
-        // Turn horizontal status bar back on
-        if config.theme.tabs.spacer_lines == 0 {
-            let _ = Command::new("tmux")
-                .args(["set", "-g", "status", "on"])
-                .status();
-        } else {
-            let _ = Command::new("tmux")
-                .args(["set", "-g", "status", "2"])
-                .status();
-        }
-    } else {
-        // Switch to vertical rail sidebar
-        if rail_pane_id.is_some() {
-            return Ok(());
-        }
+    let _ = Command::new("tmux")
+        .args([
+            "display-message",
+            "agymux: Vertical rail is deprecated. Top tab bar is always enabled (Ctrl+Space b to switch, Ctrl+Space h for cheatsheet).",
+        ])
+        .status();
 
-        // Hide horizontal status bar
-        let _ = Command::new("tmux")
-            .args(["set", "-g", "status", "off"])
-            .status();
-
-        // Split window to create rail pane
-        let mut split_cmd = Command::new("tmux");
-        split_cmd.args(["split-window", "-h"]);
-        if is_left {
-            split_cmd.arg("-b");
-        }
-        split_cmd.args(["-l", "42", "-P", "-F", "#{pane_id}", "agymux rail"]);
-
-        if let Ok(out) = split_cmd.output() {
-            let new_pid = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !new_pid.is_empty() {
-                let _ = Command::new("tmux")
-                    .args(["select-pane", "-t", &new_pid, "-T", "agymux-rail"])
-                    .status();
-                let _ = Command::new("tmux")
-                    .args(["set-option", "-p", "-t", &new_pid, "@is_rail", "1"])
-                    .status();
-            }
-        }
-    }
-
+    println!("agymux: Vertical sidebar rail is deprecated in favor of top tab bar. Top tabs are enabled.");
     Ok(())
 }
 
@@ -1274,6 +1237,52 @@ pub fn run_hook() -> Result<()> {
                     if let Some(t) = title {
                         if !t.trim().is_empty() {
                             let clean = sanitize_title(&t);
+
+                            // Strategy 1: Check TMUX_PANE for exact pane -> window identification
+                            if let Ok(pane_id) = std::env::var("TMUX_PANE") {
+                                if let Ok(out) = Command::new("tmux")
+                                    .args([
+                                        "display-message",
+                                        "-p",
+                                        "-t",
+                                        &pane_id,
+                                        "#{window_id}:#{window_name}:#{@conversation_id}",
+                                    ])
+                                    .output()
+                                {
+                                    if out.status.success() {
+                                        let stdout = String::from_utf8_lossy(&out.stdout);
+                                        let parts: Vec<&str> = stdout.trim().splitn(3, ':').collect();
+                                        if !parts.is_empty() && !parts[0].is_empty() {
+                                            let win_id = parts[0];
+                                            let win_name = parts.get(1).copied().unwrap_or("");
+                                            let win_cid = parts.get(2).copied().unwrap_or("");
+
+                                            if win_cid != cid {
+                                                let _ = Command::new("tmux")
+                                                    .args([
+                                                        "set-option",
+                                                        "-w",
+                                                        "-t",
+                                                        win_id,
+                                                        "@conversation_id",
+                                                        cid,
+                                                    ])
+                                                    .status();
+                                            }
+                                            if win_name != clean {
+                                                let _ = Command::new("tmux")
+                                                    .args(["rename-window", "-t", win_id, &clean])
+                                                    .status();
+                                            }
+                                            println!("{{}}");
+                                            return Ok(());
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Strategy 2: If TMUX_PANE is absent, check for exact window matching win_cid == cid
                             if let Ok(out) = Command::new("tmux")
                                 .args([
                                     "list-windows",
@@ -1283,13 +1292,7 @@ pub fn run_hook() -> Result<()> {
                                 .output()
                             {
                                 let stdout = String::from_utf8_lossy(&out.stdout);
-                                let mut matched = false;
-                                let mut single_fallback: Option<String> = None;
-                                let mut candidate_fallback: Option<String> = None;
-                                let mut window_count = 0;
-
                                 for line in stdout.lines() {
-                                    window_count += 1;
                                     let parts: Vec<&str> = line.splitn(3, ':').collect();
                                     if parts.len() >= 3 {
                                         let win_id = parts[0];
@@ -1297,7 +1300,6 @@ pub fn run_hook() -> Result<()> {
                                         let win_name = parts[2];
 
                                         if win_cid == cid {
-                                            matched = true;
                                             if win_name != clean {
                                                 let _ = Command::new("tmux")
                                                     .args(["rename-window", "-t", win_id, &clean])
@@ -1305,41 +1307,6 @@ pub fn run_hook() -> Result<()> {
                                             }
                                             break;
                                         }
-
-                                        if win_cid.is_empty() {
-                                            single_fallback = Some(win_id.to_string());
-                                            if win_name == "+ new"
-                                                || win_name.starts_with("agy")
-                                                || win_name == "term"
-                                            {
-                                                candidate_fallback = Some(win_id.to_string());
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if !matched {
-                                    let fallback_target = candidate_fallback.or_else(|| {
-                                        if window_count == 1 {
-                                            single_fallback
-                                        } else {
-                                            None
-                                        }
-                                    });
-                                    if let Some(target) = fallback_target {
-                                        let _ = Command::new("tmux")
-                                            .args([
-                                                "set-option",
-                                                "-w",
-                                                "-t",
-                                                &target,
-                                                "@conversation_id",
-                                                cid,
-                                            ])
-                                            .status();
-                                        let _ = Command::new("tmux")
-                                            .args(["rename-window", "-t", &target, &clean])
-                                            .status();
                                     }
                                 }
                             }

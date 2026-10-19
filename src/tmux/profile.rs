@@ -131,70 +131,98 @@ impl TmuxProfile {
         lines.push(format!("bind {} send-prefix", prefix));
 
         // Keybindings & popups
-        // Switcher (Local tab/conv picker)
-        lines.push(
-            "bind s display-popup -E -w 85% -h 80% \"agymux switch --scope local\"".to_string(),
-        );
-        lines.push(
-            "bind S display-popup -E -w 85% -h 80% \"agymux switch --scope global\"".to_string(),
-        );
+        // Switcher (2-pane switcher with live preview)
+        lines.push("bind b display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+        lines.push("bind B display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
 
-        // Project picker
-        lines.push("bind P display-popup -E -w 70% -h 70% \"agymux project\"".to_string());
+        // Project switcher
+        lines.push("bind p display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+        lines.push("bind P display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
 
-        // Command palette
-        lines.push("bind p display-popup -E -w 60% -h 65% \"agymux palette\"".to_string());
-
-        // Shortcut helper / cheatsheet
-        lines.push("bind h display-popup -E -w 65% -h 70% \"agymux helper\"".to_string());
+        // Actions / Command palette
+        lines.push("bind a display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+        lines.push("bind A display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
 
         // Tab management
-        lines.push(
-            "bind c new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\"".to_string(),
-        );
-        lines.push("bind x kill-window".to_string());
+        lines.push("bind c new-window -n \"+ new\" \"agymux run\"".to_string());
+        lines.push("bind C new-window -n \"+ new\" \"agymux run\"".to_string());
+
+        lines.push("bind x confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
+        lines.push("bind X confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
+
+        lines.push("bind r command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+        lines.push("bind R command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+
         lines.push("bind d detach-client".to_string());
-        lines.push("bind r refresh-client".to_string());
-        lines.push("bind q detach-client".to_string());
-        lines.push("bind Q kill-session".to_string());
-        lines.push("bind b display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
-        lines.push("bind B run-shell \"agymux layout\"".to_string());
+        lines.push("bind D detach-client".to_string());
+
+        lines.push("bind k confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
+        lines.push("bind K confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
+
+        // Shortcut helper / cheatsheet
+        lines.push("bind h display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
+        lines.push("bind H display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
+        lines.push("bind ? display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
+
         lines.push("bind t new-window -n \"term\" \"$SHELL\"".to_string());
-        lines.push("bind R run-shell \"agymux palette -a reload\"".to_string());
+        lines.push("bind T new-window -n \"term\" \"$SHELL\"".to_string());
+
         lines.push(
             "bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
+        );
+        lines.push(
+            "bind M run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
         );
 
         // Bilingual Cyrillic bindings
         if cyrillic {
             lines.push("# Bilingual RussianWin pairings".to_string());
-            lines.push(
-                "bind ы display-popup -E -w 85% -h 80% \"agymux switch --scope local\"".to_string(),
-            );
-            lines.push(
-                "bind Ы display-popup -E -w 85% -h 80% \"agymux switch --scope global\""
-                    .to_string(),
-            );
-            lines.push("bind З display-popup -E -w 70% -h 70% \"agymux project\"".to_string());
-            lines.push("bind з display-popup -E -w 60% -h 65% \"agymux palette\"".to_string());
-            lines.push("bind р display-popup -E -w 65% -h 70% \"agymux helper\"".to_string());
-            lines.push(
-                "bind с new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\""
-                    .to_string(),
-            );
-            lines.push("bind ч kill-window".to_string());
+            lines.push("bind и display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+            lines.push("bind И display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+
+            lines.push("bind з display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+            lines.push("bind З display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+
+            lines.push("bind ф display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+            lines.push("bind Ф display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+
+            lines.push("bind с new-window -n \"+ new\" \"agymux run\"".to_string());
+            lines.push("bind С new-window -n \"+ new\" \"agymux run\"".to_string());
+
+            lines.push("bind ч confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
+            lines.push("bind Ч confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
+
+            lines.push("bind к command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+            lines.push("bind К command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+
             lines.push("bind в detach-client".to_string());
-            lines.push("bind к refresh-client".to_string());
-            lines.push("bind К run-shell \"agymux palette -a reload\"".to_string());
-            lines.push("bind й detach-client".to_string());
-            lines.push("bind Й kill-session".to_string());
-            lines.push("bind и display-popup -E -w 75% -h 60% \"agymux bind\"".to_string());
-            lines.push("bind И run-shell \"agymux layout\"".to_string());
+            lines.push("bind В detach-client".to_string());
+
+            lines.push("bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
+            lines.push("bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
+
+            lines.push("bind р display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
+            lines.push("bind Р display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
+
             lines.push("bind е new-window -n \"term\" \"$SHELL\"".to_string());
+            lines.push("bind Е new-window -n \"term\" \"$SHELL\"".to_string());
+
             lines.push(
                 "bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
             );
+            lines.push(
+                "bind Ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
+            );
         }
+
+        // Direct tab switching (prefix-less Alt + 1..9)
+        for i in 1..=9 {
+            lines.push(format!("bind-key -n M-{} select-window -t :{}", i, i));
+        }
+
+        // Cycling (prefix-less Alt + Left / Right)
+        lines.push("bind-key -n M-Left previous-window".to_string());
+        lines.push("bind-key -n M-Right next-window".to_string());
 
         // Direct tab switching (Prefix + 1..9)
         for i in 1..=9 {
@@ -273,22 +301,63 @@ mod tests {
         assert!(content.contains("bind-key -T root MouseDown2Status"));
         assert!(content.contains("bind-key -T root MouseDown3Status"));
         assert!(content
-            .contains("bind c new-window -c \"#{pane_current_path}\" -n \"+ new\" \"agymux run\""));
-        assert!(content.contains("bind q detach-client"));
-        assert!(content.contains("bind Q kill-session"));
-        assert!(content.contains("bind b display-popup -E -w 75% -h 60% \"agymux bind\""));
-        assert!(content.contains("bind B run-shell \"agymux layout\""));
+            .contains("bind c new-window -n \"+ new\" \"agymux run\""));
+        assert!(content
+            .contains("bind C new-window -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind d detach-client"));
+        assert!(content.contains("bind D detach-client"));
+        assert!(content.contains("bind k confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(content.contains("bind K confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(content.contains("bind b display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind B display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind p display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind P display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind a display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind A display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(!content.contains("C-S-p"));
+        assert!(!content.contains("C-S-P"));
+        assert!(content.contains("bind-key -n M-1 select-window -t :1"));
+        assert!(content.contains("bind-key -n M-9 select-window -t :9"));
+        assert!(content.contains("bind-key -n M-Left previous-window"));
+        assert!(content.contains("bind-key -n M-Right next-window"));
+        assert!(content.contains("bind 1 select-window -t :1"));
+        assert!(content.contains("bind 9 select-window -t :9"));
+        assert!(content.contains("bind Left previous-window"));
+        assert!(content.contains("bind Right next-window"));
+        assert!(content.contains("bind x confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
+        assert!(content.contains("bind X confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
+        assert!(content.contains("bind r command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind R command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind h display-popup -E -w 75% -h 70% \"agymux helper\""));
+        assert!(content.contains("bind H display-popup -E -w 75% -h 70% \"agymux helper\""));
+        assert!(content.contains("bind ? display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind t new-window -n \"term\" \"$SHELL\""));
+        assert!(content.contains("bind T new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
+        assert!(content.contains("bind M run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
         // Check cyrillic bindings by default
-        assert!(content.contains("bind с new-window"));
-        assert!(content.contains("bind ы display-popup"));
-        assert!(content.contains("bind й detach-client"));
-        assert!(content.contains("bind Й kill-session"));
-        assert!(content.contains("bind и display-popup -E -w 75% -h 60% \"agymux bind\""));
-        assert!(content.contains("bind И run-shell \"agymux layout\""));
+        assert!(content.contains("bind с new-window -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind С new-window -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind и display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind И display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind з display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind З display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind ф display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind Ф display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind в detach-client"));
+        assert!(content.contains("bind В detach-client"));
+        assert!(content.contains("bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(content.contains("bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(content.contains("bind ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
+        assert!(content.contains("bind Ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
+        assert!(content.contains("bind к command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind К command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind р display-popup -E -w 75% -h 70% \"agymux helper\""));
+        assert!(content.contains("bind Р display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind е new-window -n \"term\" \"$SHELL\""));
+        assert!(content.contains("bind Е new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
+        assert!(content.contains("bind Ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
     }
 
     #[test]
@@ -335,7 +404,7 @@ mod tests {
         assert!(content.contains("set -g status-position bottom"));
         assert!(content.contains("set -g prefix C-a"));
         assert!(content.contains("bind C-a send-prefix"));
-        assert!(!content.contains("bind ы display-popup"));
+        assert!(!content.contains("bind и display-popup"));
         assert!(!content.contains("bind с new-window"));
     }
 
