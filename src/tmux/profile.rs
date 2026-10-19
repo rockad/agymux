@@ -198,8 +198,12 @@ impl TmuxProfile {
             lines.push("bind в detach-client".to_string());
             lines.push("bind В detach-client".to_string());
 
-            lines.push("bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
-            lines.push("bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string());
+            lines.push(
+                "bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string(),
+            );
+            lines.push(
+                "bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session".to_string(),
+            );
 
             lines.push("bind р display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
             lines.push("bind Р display-popup -E -w 75% -h 70% \"agymux helper\"".to_string());
@@ -300,14 +304,16 @@ mod tests {
         assert!(content.contains("bind-key -T root MouseDown1Status"));
         assert!(content.contains("bind-key -T root MouseDown2Status"));
         assert!(content.contains("bind-key -T root MouseDown3Status"));
-        assert!(content
-            .contains("bind c new-window -n \"+ new\" \"agymux run\""));
-        assert!(content
-            .contains("bind C new-window -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind c new-window -n \"+ new\" \"agymux run\""));
+        assert!(content.contains("bind C new-window -n \"+ new\" \"agymux run\""));
         assert!(content.contains("bind d detach-client"));
         assert!(content.contains("bind D detach-client"));
-        assert!(content.contains("bind k confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
-        assert!(content.contains("bind K confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(
+            content.contains("bind k confirm-before -p \"Kill session #S? (y/n)\" kill-session")
+        );
+        assert!(
+            content.contains("bind K confirm-before -p \"Kill session #S? (y/n)\" kill-session")
+        );
         assert!(content.contains("bind b display-popup -E -w 85% -h 75% \"agymux switch\""));
         assert!(content.contains("bind B display-popup -E -w 85% -h 75% \"agymux switch\""));
         assert!(content.contains("bind p display-popup -E -w 85% -h 70% \"agymux project\""));
@@ -346,8 +352,12 @@ mod tests {
         assert!(content.contains("bind Ф display-popup -E -w 75% -h 60% \"agymux palette\""));
         assert!(content.contains("bind в detach-client"));
         assert!(content.contains("bind В detach-client"));
-        assert!(content.contains("bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
-        assert!(content.contains("bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session"));
+        assert!(
+            content.contains("bind л confirm-before -p \"Kill session #S? (y/n)\" kill-session")
+        );
+        assert!(
+            content.contains("bind Л confirm-before -p \"Kill session #S? (y/n)\" kill-session")
+        );
         assert!(content.contains("bind ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind Ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind к command-prompt -I \"#W\" \"rename-window '%%'\""));

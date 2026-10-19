@@ -283,9 +283,7 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         let _ = self
             .runner
             .run(&["set", "-g", "status-position", effective_position]);
-        let _ = self
-            .runner
-            .run(&["set", "-t", name, "status", status_val]);
+        let _ = self.runner.run(&["set", "-t", name, "status", status_val]);
         let _ = self
             .runner
             .run(&["set", "-t", name, "status-position", effective_position]);

@@ -263,11 +263,23 @@ fn handle_attach(
 
     // If session already exists, attach or switch directly
     if tmux::TmuxDriver::session_exists(session_name) {
-        let status_val = if config.theme.tabs.spacer_lines == 0 { "on" } else { "2" };
-        let _ = Command::new("tmux").args(["set", "-g", "status", status_val]).status();
-        let _ = Command::new("tmux").args(["set", "-g", "status-position", "top"]).status();
-        let _ = Command::new("tmux").args(["set", "-t", session_name, "status", status_val]).status();
-        let _ = Command::new("tmux").args(["set", "-t", session_name, "status-position", "top"]).status();
+        let status_val = if config.theme.tabs.spacer_lines == 0 {
+            "on"
+        } else {
+            "2"
+        };
+        let _ = Command::new("tmux")
+            .args(["set", "-g", "status", status_val])
+            .status();
+        let _ = Command::new("tmux")
+            .args(["set", "-g", "status-position", "top"])
+            .status();
+        let _ = Command::new("tmux")
+            .args(["set", "-t", session_name, "status", status_val])
+            .status();
+        let _ = Command::new("tmux")
+            .args(["set", "-t", session_name, "status-position", "top"])
+            .status();
 
         if std::env::var("TMUX").is_ok() {
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
@@ -1191,10 +1203,18 @@ pub fn run_layout(_mode: Option<&str>) -> Result<()> {
     }
 
     // Guarantee horizontal top tab bar is ALWAYS enabled; NEVER set status off globally!
-    let _ = Command::new("tmux").args(["set", "-g", "status", status_val]).status();
-    let _ = Command::new("tmux").args(["set", "-g", "status-position", "top"]).status();
-    let _ = Command::new("tmux").args(["set", "status", status_val]).status();
-    let _ = Command::new("tmux").args(["set", "status-position", "top"]).status();
+    let _ = Command::new("tmux")
+        .args(["set", "-g", "status", status_val])
+        .status();
+    let _ = Command::new("tmux")
+        .args(["set", "-g", "status-position", "top"])
+        .status();
+    let _ = Command::new("tmux")
+        .args(["set", "status", status_val])
+        .status();
+    let _ = Command::new("tmux")
+        .args(["set", "status-position", "top"])
+        .status();
 
     let _ = Command::new("tmux")
         .args([
@@ -1252,7 +1272,8 @@ pub fn run_hook() -> Result<()> {
                                 {
                                     if out.status.success() {
                                         let stdout = String::from_utf8_lossy(&out.stdout);
-                                        let parts: Vec<&str> = stdout.trim().splitn(3, ':').collect();
+                                        let parts: Vec<&str> =
+                                            stdout.trim().splitn(3, ':').collect();
                                         if !parts.is_empty() && !parts[0].is_empty() {
                                             let win_id = parts[0];
                                             let win_name = parts.get(1).copied().unwrap_or("");

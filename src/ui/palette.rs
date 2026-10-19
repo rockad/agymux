@@ -207,9 +207,7 @@ impl PaletteState {
                     PaletteAction::SwitchTab => {
                         "switch".contains(&q) || "tab".contains(&q) || q == "b" || q == "и"
                     }
-                    PaletteAction::SwitchProject => {
-                        "project".contains(&q) || q == "p" || q == "з"
-                    }
+                    PaletteAction::SwitchProject => "project".contains(&q) || q == "p" || q == "з",
                     PaletteAction::BindConversation => {
                         "bind".contains(&q) || "attach".contains(&q) || "connect".contains(&q)
                     }
