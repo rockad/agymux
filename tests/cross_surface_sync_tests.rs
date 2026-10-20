@@ -2,6 +2,7 @@ use agymux::cli::{Cli, Commands};
 use agymux::config::Config;
 use agymux::core::session::{get_conversation_mtime_and_steps, latest_conversation_id};
 use agymux::ui::palette::{PaletteAction, PaletteItem, PaletteState};
+use agymux::{build_agy_args, is_remote_control_active, resolve_effective_remote_control};
 use clap::Parser;
 use rusqlite::Connection;
 
@@ -9,13 +10,70 @@ use rusqlite::Connection;
 fn test_config_remote_control_default_and_custom() {
     let default_config = Config::default();
     assert!(!default_config.general.remote_control);
+    assert!(default_config.general.single_remote_control_instance);
 
     let toml_str = r#"
         [general]
         remote_control = true
+        single_remote_control_instance = false
     "#;
     let config: Config = toml::from_str(toml_str).expect("toml parsing succeeds");
     assert!(config.general.remote_control);
+    assert!(!config.general.single_remote_control_instance);
+}
+
+#[test]
+fn test_is_remote_control_active_and_single_instance_gating() {
+    // 1. Verify is_remote_control_active executes cleanly and returns a bool without panicking
+    let _active = is_remote_control_active();
+
+    // 2. Verify gating logic transitions
+    // When remote control is requested and single_instance is enabled:
+    // If active instance exists -> downgrade to false
+    assert!(!resolve_effective_remote_control(true, true, true));
+    // If no active instance -> allowed (true)
+    assert!(resolve_effective_remote_control(true, true, false));
+
+    // When single_instance is disabled -> always honor requested flag regardless of active instances
+    assert!(resolve_effective_remote_control(true, false, true));
+    assert!(resolve_effective_remote_control(true, false, false));
+
+    // When remote control was not requested -> always false
+    assert!(!resolve_effective_remote_control(false, true, true));
+    assert!(!resolve_effective_remote_control(false, true, false));
+    assert!(!resolve_effective_remote_control(false, false, true));
+    assert!(!resolve_effective_remote_control(false, false, false));
+
+    // 3. Verify build_agy_args omits --remote-control when effective_remote_control is false
+    let forwarded_with_flag = vec![
+        "--remote-control".to_string(),
+        "-c".to_string(),
+        "cid-999".to_string(),
+    ];
+    let args_downgraded = build_agy_args(
+        "my-project",
+        &forwarded_with_flag,
+        Some("cid-999"),
+        true,
+        false,
+    );
+    assert!(
+        !args_downgraded.contains(&"--remote-control".to_string()),
+        "build_agy_args must not contain --remote-control when effective_remote_control is false"
+    );
+
+    // When effective_remote_control is true, --remote-control must be present
+    let args_enabled = build_agy_args(
+        "my-project",
+        &forwarded_with_flag,
+        Some("cid-999"),
+        true,
+        true,
+    );
+    assert!(
+        args_enabled.contains(&"--remote-control".to_string()),
+        "build_agy_args must contain --remote-control when effective_remote_control is true"
+    );
 }
 
 #[test]

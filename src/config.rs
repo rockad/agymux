@@ -70,6 +70,8 @@ pub struct GeneralConfig {
     pub startup_action: StartupAction,
     #[serde(default)]
     pub remote_control: bool,
+    #[serde(default = "default_true")]
+    pub single_remote_control_instance: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,6 +209,7 @@ impl Default for GeneralConfig {
             default_effort: default_effort(),
             startup_action: default_startup_action(),
             remote_control: false,
+            single_remote_control_instance: true,
         }
     }
 }
@@ -324,6 +327,7 @@ mod tests {
         assert_eq!(config.general.default_effort, "medium");
         assert_eq!(config.general.startup_action, StartupAction::Ask);
         assert!(!config.general.remote_control);
+        assert!(config.general.single_remote_control_instance);
         assert_eq!(config.theme.preset, "default");
         assert!(!config.theme.rounded_pills);
         assert_eq!(config.theme.status_position, "top");
@@ -403,6 +407,23 @@ isolated_socket = true
         assert_eq!(config.keybindings.prefix, "C-a");
         assert!(!config.keybindings.bilingual_cyrillic);
         assert!(config.tmux.isolated_socket);
+    }
+
+    #[test]
+    fn test_single_remote_control_instance_default() {
+        let default_config = Config::default();
+        assert!(default_config.general.single_remote_control_instance);
+
+        let empty_toml = "";
+        let config: Config = toml::from_str(empty_toml).expect("empty toml parses");
+        assert!(config.general.single_remote_control_instance);
+
+        let custom_toml = r#"
+[general]
+single_remote_control_instance = false
+"#;
+        let custom_config: Config = toml::from_str(custom_toml).expect("custom toml parses");
+        assert!(!custom_config.general.single_remote_control_instance);
     }
 
     #[test]

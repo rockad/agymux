@@ -26,6 +26,7 @@ default_model = "Gemini 3.6 Flash (Medium)"
 default_effort = "medium"
 startup_action = "ask"
 remote_control = false
+single_remote_control_instance = true
 
 [theme]
 preset = "default"
@@ -64,6 +65,7 @@ isolated_socket = false
 | `default_effort` | `string` | `"medium"` | `"none"`, `"low"`, `"medium"`, `"high"` | Default thinking / reasoning effort level passed to Antigravity sessions. |
 | `startup_action` | `string` | `"ask"` | `"new"`, `"resume_latest"`, `"picker"`, `"terminal"`, `"ask"` | Cockpit launch behavior when invoked without command arguments. |
 | `remote_control` | `boolean` | `false` | `true`, `false` | Enable cross-device remote control mode (`--remote-control`). Windows display the `󰢹` indicator. |
+| `single_remote_control_instance` | `boolean` | `true` | `true`, `false` | Restrict remote-control mode to a single active instance per machine to prevent conversation forking across competing remote sessions. |
 
 #### Startup Action Choices:
 - `"ask"` (default): Interactive interactive prompt offering New Tab, Resume Latest, or Switcher.

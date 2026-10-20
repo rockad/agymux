@@ -39,9 +39,18 @@ pub fn run() -> Result<()> {
 
     // Direct execution without tmux
     if cli.direct {
+        let requested_rc = remote_control;
+        let mut effective_remote_control = requested_rc;
+        if requested_rc
+            && config.general.single_remote_control_instance
+            && is_remote_control_active()
+        {
+            effective_remote_control = false;
+            eprintln!("agymux: Active remote-control instance already running on this machine (skipping --remote-control)");
+        }
         let mut cmd = Command::new("agy");
         cmd.args(["--project", &project]);
-        if remote_control {
+        if effective_remote_control {
             cmd.arg("--remote-control");
         }
         let status = cmd.status()?;
@@ -116,13 +125,38 @@ pub fn run() -> Result<()> {
 
         Some(Commands::New { name, args }) => {
             let tab_name = name.unwrap_or_else(|| "+ new".to_string());
+            let requested_rc = remote_control || args.contains(&"--remote-control".to_string());
+            let mut effective_remote_control = requested_rc;
+            if requested_rc
+                && config.general.single_remote_control_instance
+                && is_remote_control_active()
+            {
+                effective_remote_control = false;
+                if std::env::var("TMUX").is_ok() {
+                    let _ = Command::new("tmux")
+                        .args([
+                            "display-message",
+                            "agymux: Active remote-control instance already running on this machine (skipping --remote-control)",
+                        ])
+                        .status();
+                } else {
+                    eprintln!("agymux: Active remote-control instance already running on this machine (skipping --remote-control)");
+                }
+            }
             let mut run_args = format!("agymux run --project '{}'", project);
-            if remote_control {
+            if effective_remote_control {
                 run_args.push_str(" --remote-control");
             }
-            if !args.is_empty() {
+            let filtered_args: Vec<String> = if !effective_remote_control {
+                args.into_iter()
+                    .filter(|a| a != "--remote-control")
+                    .collect()
+            } else {
+                args
+            };
+            if !filtered_args.is_empty() {
                 run_args.push(' ');
-                run_args.push_str(&args.join(" "));
+                run_args.push_str(&filtered_args.join(" "));
             }
 
             if std::env::var("TMUX").is_ok() {
@@ -156,7 +190,7 @@ pub fn run() -> Result<()> {
 
         Some(Commands::Run { args }) => {
             let rc = remote_control || args.contains(&"--remote-control".to_string());
-            run_runner(&project, args, rc)?;
+            run_runner(&project, args, rc, &config)?;
         }
 
         Some(Commands::Preview { conversation_id }) => {
@@ -208,21 +242,50 @@ fn handle_attach(
     let _ = ensure_hook_installed();
     let _ = heal_unbound_windows(project);
 
+    let requested_rc = remote_control || args.contains(&"--remote-control".to_string());
+    let mut effective_remote_control = requested_rc;
+    if requested_rc && config.general.single_remote_control_instance && is_remote_control_active() {
+        effective_remote_control = false;
+        if std::env::var("TMUX").is_ok() {
+            let _ = Command::new("tmux")
+                .args([
+                    "display-message",
+                    "agymux: Active remote-control instance already running on this machine (skipping --remote-control)",
+                ])
+                .status();
+        } else {
+            eprintln!("agymux: Active remote-control instance already running on this machine (skipping --remote-control)");
+        }
+    }
+
     // If explicit arguments were passed, forward them directly
     if !args.is_empty() {
         if std::env::var("TMUX").is_ok() {
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
                 if curr_session == session_name {
-                    return run_runner(project, args.to_vec(), remote_control);
+                    return run_runner(project, args.to_vec(), effective_remote_control, config);
                 }
             }
             if !tmux::TmuxDriver::session_exists(session_name) {
                 let mut run_cmd = format!("agymux run --project '{}'", project);
-                if remote_control {
+                if effective_remote_control {
                     run_cmd.push_str(" --remote-control");
                 }
-                run_cmd.push(' ');
-                run_cmd.push_str(&args.join(" "));
+                let filtered_args: Vec<&String> = if !effective_remote_control {
+                    args.iter().filter(|a| *a != "--remote-control").collect()
+                } else {
+                    args.iter().collect()
+                };
+                if !filtered_args.is_empty() {
+                    run_cmd.push(' ');
+                    run_cmd.push_str(
+                        &filtered_args
+                            .iter()
+                            .map(|s| s.as_str())
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    );
+                }
                 tmux::TmuxDriver::ensure_session(
                     session_name,
                     dir,
@@ -236,11 +299,24 @@ fn handle_attach(
 
         if !tmux::TmuxDriver::session_exists(session_name) {
             let mut run_cmd = format!("agymux run --project '{}'", project);
-            if remote_control {
+            if effective_remote_control {
                 run_cmd.push_str(" --remote-control");
             }
-            run_cmd.push(' ');
-            run_cmd.push_str(&args.join(" "));
+            let filtered_args: Vec<&String> = if !effective_remote_control {
+                args.iter().filter(|a| *a != "--remote-control").collect()
+            } else {
+                args.iter().collect()
+            };
+            if !filtered_args.is_empty() {
+                run_cmd.push(' ');
+                run_cmd.push_str(
+                    &filtered_args
+                        .iter()
+                        .map(|s| s.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" "),
+                );
+            }
             tmux::TmuxDriver::ensure_session(
                 session_name,
                 dir,
@@ -285,7 +361,12 @@ fn handle_attach(
             if let Some(curr_session) = tmux::TmuxDriver::current_session() {
                 if curr_session == session_name {
                     // Already inside: run agy -c in this window
-                    return run_runner(project, vec!["-c".to_string()], remote_control);
+                    return run_runner(
+                        project,
+                        vec!["-c".to_string()],
+                        effective_remote_control,
+                        config,
+                    );
                 }
             }
             return tmux::TmuxDriver::switch_client(session_name);
@@ -362,7 +443,7 @@ fn handle_attach(
     match startup_action {
         crate::config::StartupAction::New => {
             let mut run_cmd = format!("agymux run --project '{}'", project);
-            if remote_control {
+            if effective_remote_control {
                 run_cmd.push_str(" --remote-control");
             }
             tmux::TmuxDriver::ensure_session(
@@ -398,7 +479,7 @@ fn handle_attach(
             } else {
                 format!("agymux run --project '{}'", project)
             };
-            if remote_control {
+            if effective_remote_control {
                 run_cmd.push_str(" --remote-control");
             }
 
@@ -639,6 +720,187 @@ pub fn sanitize_title(raw: &str) -> String {
     }
 }
 
+/// Check if an active remote-control instance is running elsewhere on this machine
+pub fn is_remote_control_active() -> bool {
+    let my_pid = std::process::id();
+    if is_agy_process_remote_control_active(my_pid) {
+        return true;
+    }
+    if is_tmux_remote_control_active(my_pid) {
+        return true;
+    }
+    false
+}
+
+/// Helper function to resolve effective remote control state based on request, config, and liveness
+pub fn resolve_effective_remote_control(
+    requested: bool,
+    single_instance: bool,
+    is_active: bool,
+) -> bool {
+    if requested && single_instance && is_active {
+        false
+    } else {
+        requested
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn is_agy_process_remote_control_active(my_pid: u32) -> bool {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let Ok(pid) = file_name.parse::<u32>() else {
+            continue;
+        };
+        if pid == my_pid {
+            continue;
+        }
+        let proc_path = entry.path();
+        let cmdline_path = proc_path.join("cmdline");
+        let Ok(cmdline_bytes) = std::fs::read(&cmdline_path) else {
+            continue;
+        };
+        if cmdline_bytes.is_empty() {
+            continue;
+        }
+        let args: Vec<&str> = cmdline_bytes
+            .split(|&b| b == 0)
+            .filter_map(|slice| std::str::from_utf8(slice).ok())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if args.is_empty() {
+            continue;
+        }
+        let is_agy = if let Ok(exe) = std::fs::read_link(proc_path.join("exe")) {
+            exe.file_name()
+                .is_some_and(|name| name == "agy" || name.to_string_lossy().starts_with("agy"))
+        } else {
+            std::path::Path::new(args[0])
+                .file_name()
+                .is_some_and(|name| name == "agy" || name.to_string_lossy().starts_with("agy"))
+        };
+        if is_agy
+            && args
+                .iter()
+                .any(|arg| *arg == "--remote-control" || arg.starts_with("--remote-control="))
+        {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(not(target_os = "linux"))]
+fn is_agy_process_remote_control_active(my_pid: u32) -> bool {
+    if let Ok(output) = Command::new("pgrep")
+        .args(["-f", "agy.*--remote-control"])
+        .output()
+    {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                if let Ok(pid) = line.trim().parse::<u32>() {
+                    if pid != my_pid {
+                        return true;
+                    }
+                }
+            }
+        }
+    } else if let Ok(output) = Command::new("ps").args(["-eo", "pid,args"]).output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            for line in stdout.lines() {
+                let mut parts = line.split_whitespace();
+                if let Some(pid_str) = parts.next() {
+                    if let Ok(pid) = pid_str.parse::<u32>() {
+                        if pid == my_pid {
+                            continue;
+                        }
+                        let rest: Vec<&str> = parts.collect();
+                        if let Some(cmd) = rest.first() {
+                            let is_agy = std::path::Path::new(cmd).file_name().is_some_and(|n| {
+                                n == "agy" || n.to_string_lossy().starts_with("agy")
+                            });
+                            if is_agy
+                                && rest.iter().any(|a| {
+                                    *a == "--remote-control" || a.starts_with("--remote-control=")
+                                })
+                            {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn is_tmux_remote_control_active(my_pid: u32) -> bool {
+    let current_pane_pid = if std::env::var("TMUX").is_ok() {
+        Command::new("tmux")
+            .args(["display-message", "-p", "#{pane_pid}"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .and_then(|s| s.trim().parse::<u32>().ok())
+    } else {
+        None
+    };
+
+    let Ok(output) = Command::new("tmux")
+        .args(["list-windows", "-a", "-F", "#{pane_pid}:#{@remote_control}"])
+        .output()
+    else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = trimmed.split(':').collect();
+        if parts.len() >= 2 {
+            let pane_pid_str = parts[0].trim();
+            let rc_val = parts[1].trim();
+            if rc_val == "1" {
+                if let Ok(pid) = pane_pid_str.parse::<u32>() {
+                    if pid != my_pid && Some(pid) != current_pane_pid && is_process_alive(pid) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+fn is_process_alive(pid: u32) -> bool {
+    #[cfg(unix)]
+    {
+        let res = unsafe { libc::kill(pid as libc::pid_t, 0) };
+        if res == 0 {
+            true
+        } else {
+            std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM)
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
 /// Build arguments forwarded to agy.
 /// Ensures project is not duplicated, -c vs --conversation semantics are respected
 /// (agy takes --conversation <id> for specific conversations, and boolean -c for latest),
@@ -663,9 +925,11 @@ pub fn build_agy_args(
             }
             continue;
         }
-        if a == "--remote-control" {
-            has_remote_control = true;
-            forward_args.push(a.clone());
+        if a == "--remote-control" || a.starts_with("--remote-control=") {
+            if remote_control {
+                has_remote_control = true;
+                forward_args.push(a.clone());
+            }
             i += 1;
             continue;
         }
@@ -696,7 +960,12 @@ pub fn build_agy_args(
 }
 
 /// Internal process runner with instant prompt-based window naming and title watcher
-fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<()> {
+fn run_runner(
+    project: &str,
+    args: Vec<String>,
+    remote_control: bool,
+    config: &Config,
+) -> Result<()> {
     let in_tmux = std::env::var("TMUX").is_ok();
     let mut conv_id = None;
     let mut initial_prompt = None;
@@ -740,6 +1009,23 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
         conv_id = latest_existing_id.clone();
     }
 
+    let requested_rc = remote_control || args.contains(&"--remote-control".to_string());
+    let mut effective_remote_control = requested_rc;
+
+    if requested_rc && config.general.single_remote_control_instance && is_remote_control_active() {
+        effective_remote_control = false;
+        if in_tmux {
+            let _ = Command::new("tmux")
+                .args([
+                    "display-message",
+                    "agymux: Active remote-control instance already running on this machine (skipping --remote-control)",
+                ])
+                .status();
+        } else {
+            eprintln!("agymux: Active remote-control instance already running on this machine (skipping --remote-control)");
+        }
+    }
+
     // 1. Instant window naming and capture window id
     let target_window = if in_tmux {
         Command::new("tmux")
@@ -753,7 +1039,7 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
     };
 
     if in_tmux {
-        let rc_val = if remote_control { "1" } else { "0" };
+        let rc_val = if effective_remote_control { "1" } else { "0" };
         if let Some(ref win) = target_window {
             let _ = Command::new("tmux")
                 .args(["set-option", "-w", "-t", win, "@remote_control", rc_val])
@@ -798,7 +1084,7 @@ fn run_runner(project: &str, args: Vec<String>, remote_control: bool) -> Result<
         &args,
         conv_id.as_deref(),
         has_continue_flag,
-        remote_control,
+        effective_remote_control,
     );
     cmd.args(&forward_args);
 
