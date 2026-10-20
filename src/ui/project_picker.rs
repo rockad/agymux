@@ -258,21 +258,43 @@ fn discover_projects(base_dir: &Path) -> Vec<ProjectItem> {
     // Query tmux active sessions starting with agy-
     if let Ok(output) = Command::new("tmux")
         .args([
-            "list-sessions",
+            "list-panes",
+            "-a",
             "-F",
-            "#{session_name}\t#{session_windows}\t#{session_attached}",
+            "#{session_name}\t#{session_windows}\t#{session_attached}\t#{pane_current_path}\t#{@agymux_project}",
         ])
         .output()
     {
         let stdout = String::from_utf8_lossy(&output.stdout);
         for line in stdout.lines() {
             let parts: Vec<&str> = line.split('\t').collect();
-            if parts.len() >= 3 {
+            if parts.len() >= 4 {
                 let sname = parts[0];
                 if let Some(pname) = sname.strip_prefix("agy-") {
                     let nwins: usize = parts[1].parse().unwrap_or(0);
                     let natt: usize = parts[2].parse().unwrap_or(0);
-                    active_sessions.insert(pname.to_string(), (nwins, natt));
+                    let pane_path = parts[3];
+                    let opt_proj = parts.get(4).copied().unwrap_or("");
+
+                    let clean_name = if !opt_proj.is_empty()
+                        && opt_proj != "-"
+                        && !crate::core::session::is_uuid(opt_proj)
+                    {
+                        opt_proj.to_string()
+                    } else if crate::core::session::is_uuid(pname) {
+                        Path::new(pane_path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .filter(|n| !crate::core::session::is_uuid(n))
+                            .map(|n| n.to_string())
+                            .unwrap_or_default()
+                    } else {
+                        pname.to_string()
+                    };
+
+                    if !clean_name.is_empty() {
+                        active_sessions.insert(clean_name, (nwins, natt));
+                    }
                 }
             }
         }
@@ -316,7 +338,7 @@ fn discover_projects(base_dir: &Path) -> Vec<ProjectItem> {
 
     // Add any active sessions that weren't discovered in the filesystem directory
     for (name, (nwins, natt)) in active_sessions {
-        if !projects.iter().any(|p| p.name == name) {
+        if !crate::core::session::is_uuid(&name) && !projects.iter().any(|p| p.name == name) {
             let path = dirs::home_dir()
                 .unwrap_or_default()
                 .join("projects")
@@ -343,18 +365,35 @@ fn discover_projects(base_dir: &Path) -> Vec<ProjectItem> {
 /// Switch to or create the selected project session
 pub fn execute_project_switch(project: &ProjectItem) -> anyhow::Result<()> {
     let sess_name = format!("agy-{}", project.name);
+    let target_session = if crate::tmux::TmuxDriver::session_exists(&sess_name) {
+        sess_name
+    } else if let Some(existing) = crate::tmux::TmuxDriver::find_session_by_dir(&project.path) {
+        existing
+    } else {
+        sess_name
+    };
+
     let in_tmux = std::env::var("TMUX").is_ok();
 
     if in_tmux {
         let has_session = Command::new("tmux")
-            .args(["has-session", "-t", &format!("={}", sess_name)])
+            .args(["has-session", "-t", &format!("={}", target_session)])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
 
         if has_session {
             let _ = Command::new("tmux")
-                .args(["switch-client", "-t", &format!("={}", sess_name)])
+                .args([
+                    "set-option",
+                    "-t",
+                    &target_session,
+                    "@agymux_project",
+                    &project.name,
+                ])
+                .status();
+            let _ = Command::new("tmux")
+                .args(["switch-client", "-t", &format!("={}", target_session)])
                 .status();
         } else {
             let target_dir = if project.path.exists() {
@@ -368,7 +407,7 @@ pub fn execute_project_switch(project: &ProjectItem) -> anyhow::Result<()> {
                     "new-session",
                     "-d",
                     "-s",
-                    &sess_name,
+                    &target_session,
                     "-c",
                     &target_dir,
                     "-n",
@@ -378,19 +417,38 @@ pub fn execute_project_switch(project: &ProjectItem) -> anyhow::Result<()> {
                 .status();
 
             let _ = Command::new("tmux")
-                .args(["switch-client", "-t", &format!("={}", sess_name)])
+                .args([
+                    "set-option",
+                    "-t",
+                    &target_session,
+                    "@agymux_project",
+                    &project.name,
+                ])
+                .status();
+
+            let _ = Command::new("tmux")
+                .args(["switch-client", "-t", &format!("={}", target_session)])
                 .status();
         }
     } else {
         let has_session = Command::new("tmux")
-            .args(["has-session", "-t", &format!("={}", sess_name)])
+            .args(["has-session", "-t", &format!("={}", target_session)])
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
 
         if has_session {
             let _ = Command::new("tmux")
-                .args(["attach-session", "-t", &format!("={}", sess_name)])
+                .args([
+                    "set-option",
+                    "-t",
+                    &target_session,
+                    "@agymux_project",
+                    &project.name,
+                ])
+                .status();
+            let _ = Command::new("tmux")
+                .args(["attach-session", "-t", &format!("={}", target_session)])
                 .status();
         } else {
             let target_dir = if project.path.exists() {
@@ -403,12 +461,22 @@ pub fn execute_project_switch(project: &ProjectItem) -> anyhow::Result<()> {
                 .args([
                     "new-session",
                     "-s",
-                    &sess_name,
+                    &target_session,
                     "-c",
                     &target_dir,
                     "-n",
                     "main",
                     &format!("agymux run --project '{}' -c", project.name),
+                ])
+                .status();
+
+            let _ = Command::new("tmux")
+                .args([
+                    "set-option",
+                    "-t",
+                    &target_session,
+                    "@agymux_project",
+                    &project.name,
                 ])
                 .status();
         }

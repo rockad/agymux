@@ -82,8 +82,29 @@ fn clean_title(title: &str) -> String {
     }
 }
 
+/// Check if a string represents a UUID (e.g. 36 characters with 4 hyphens and hex digits)
+pub fn is_uuid(s: &str) -> bool {
+    let s = s.trim();
+    if s.len() == 36 {
+        let parts: Vec<&str> = s.split('-').collect();
+        if parts.len() == 5
+            && parts[0].len() == 8
+            && parts[1].len() == 4
+            && parts[2].len() == 4
+            && parts[3].len() == 4
+            && parts[4].len() == 12
+            && parts
+                .iter()
+                .all(|p| p.chars().all(|c| c.is_ascii_hexdigit()))
+        {
+            return true;
+        }
+    }
+    false
+}
+
 /// Extract clean file system path from project_uri or workspace_uris JSON
-fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
+pub fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
     let s = raw_uri?.trim();
     if s.is_empty() {
         return None;
@@ -111,6 +132,41 @@ fn extract_project_path(raw_uri: Option<&str>) -> Option<String> {
     } else {
         None
     }
+}
+
+/// Resolve a clean, human-readable project directory name, guarding against raw UUIDs and "main"
+pub fn resolve_project_name(
+    project_id: Option<&str>,
+    workspace_uris: Option<&str>,
+    fallback: Option<&str>,
+) -> String {
+    // 1. If project_id is non-empty, not "main", and not a UUID, use it
+    if let Some(pid) = project_id {
+        let trimmed = pid.trim();
+        if !trimmed.is_empty() && trimmed != "main" && !is_uuid(trimmed) {
+            return trimmed.to_string();
+        }
+    }
+
+    // 2. Try to extract clean directory name from workspace_uris
+    if let Some(path) = extract_project_path(workspace_uris) {
+        if let Some(name) = Path::new(&path).file_name().and_then(|n| n.to_str()) {
+            let trimmed = name.trim();
+            if !trimmed.is_empty() && !is_uuid(trimmed) {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    // 3. Try fallback (e.g. current project or directory name)
+    if let Some(fb) = fallback {
+        let trimmed = fb.trim();
+        if !trimmed.is_empty() && trimmed != "main" && !is_uuid(trimmed) {
+            return trimmed.to_string();
+        }
+    }
+
+    "main".to_string()
 }
 
 impl SessionDb {
@@ -841,5 +897,48 @@ mod tests {
             .unwrap();
         let local_ids: Vec<String> = local.into_iter().map(|item| item.id).collect();
         assert_eq!(local_ids, vec!["conv-root"]);
+    }
+
+    #[test]
+    fn test_is_uuid_and_resolve_project_name() {
+        assert!(is_uuid("f2de8c4a-f019-41a1-97b9-a4269a058738"));
+        assert!(is_uuid("4CA7628C-3C16-4F73-9D60-3D07B978665F"));
+        assert!(!is_uuid("doppelganger"));
+        assert!(!is_uuid("main"));
+        assert!(!is_uuid(""));
+        assert!(!is_uuid("f2de8c4a-f019-41a1-97b9-a4269a05873")); // 35 chars
+        assert!(!is_uuid("f2de8c4a_f019_41a1_97b9_a4269a058738")); // underscores
+
+        // When project_id is UUID and workspace_uris is present:
+        let resolved = resolve_project_name(
+            Some("f2de8c4a-f019-41a1-97b9-a4269a058738"),
+            Some("[\"file:///home/rockad/projects/doppelganger\"]"),
+            Some("main"),
+        );
+        assert_eq!(resolved, "doppelganger");
+
+        // When project_id is a human name:
+        let resolved_human = resolve_project_name(
+            Some("my-repo"),
+            Some("[\"file:///home/rockad/projects/doppelganger\"]"),
+            Some("fallback"),
+        );
+        assert_eq!(resolved_human, "my-repo");
+
+        // When project_id is empty or "main", fallback to workspace_uris:
+        let resolved_empty_pid = resolve_project_name(
+            Some(""),
+            Some("[\"file:///home/rockad/projects/doppelganger\"]"),
+            Some("fallback"),
+        );
+        assert_eq!(resolved_empty_pid, "doppelganger");
+
+        // When project_id is UUID and workspace_uris is empty, fallback to directory name:
+        let resolved_fb = resolve_project_name(
+            Some("f2de8c4a-f019-41a1-97b9-a4269a058738"),
+            None,
+            Some("doppelganger"),
+        );
+        assert_eq!(resolved_fb, "doppelganger");
     }
 }

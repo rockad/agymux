@@ -239,6 +239,42 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         Ok(())
     }
 
+    /// Find any session starting with "agy-" whose pane_current_path matches `dir`
+    pub fn find_session_by_dir(&self, dir: &Path) -> Option<String> {
+        let output = self
+            .runner
+            .run(&[
+                "list-panes",
+                "-a",
+                "-F",
+                "#{session_name}\t#{pane_current_path}",
+            ])
+            .ok()?;
+
+        let target_canonical = dir.canonicalize().ok();
+
+        for line in output.lines() {
+            let parts: Vec<&str> = line.trim().split('\t').collect();
+            if parts.len() >= 2 {
+                let session_name = parts[0];
+                let pane_path = parts[1];
+                if session_name.starts_with("agy-") {
+                    let p = Path::new(pane_path);
+                    if p == dir {
+                        return Some(session_name.to_string());
+                    }
+                    if let (Some(ref tc), Ok(pc)) = (&target_canonical, p.canonicalize()) {
+                        if pc == *tc {
+                            return Some(session_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
     pub fn ensure_session(
         &self,
         name: &str,
@@ -277,6 +313,27 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         let _ = self
             .runner
             .run(&["source-file", &conf_path.to_string_lossy()]);
+
+        // Record clean human-readable project name in session option
+        let clean_project = if let Some(stripped) = name.strip_prefix("agy-") {
+            if !crate::core::session::is_uuid(stripped)
+                && !stripped.is_empty()
+                && stripped != "main"
+            {
+                stripped.to_string()
+            } else if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+                dir_name.to_string()
+            } else {
+                stripped.to_string()
+            }
+        } else if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+            dir_name.to_string()
+        } else {
+            name.to_string()
+        };
+        let _ = self
+            .runner
+            .run(&["set-option", "-t", name, "@agymux_project", &clean_project]);
 
         // Remove any leftover `status off` in tmux server and guarantee top tab bar is ALWAYS visible in new sessions
         let _ = self.runner.run(&["set", "-g", "status", status_val]);

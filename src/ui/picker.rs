@@ -118,7 +118,7 @@ impl PickerState {
                 ref window_name,
                 is_active,
                 ref conversation_id,
-                ..
+                ref pane_path,
             } = tab.kind
             {
                 if let Some(ref cid) = conversation_id {
@@ -135,10 +135,25 @@ impl PickerState {
                         "{}[Tab {}] {}{:<24} (open)",
                         marker, window_index, turn_icon, window_name
                     ),
-                    ScopeArg::Global => format!(
-                        "{}[{}:{}] {}{:<20} (open)",
-                        marker, session, window_index, turn_icon, window_name
-                    ),
+                    ScopeArg::Global => {
+                        let clean_name = if let Some(stripped) = session.strip_prefix("agy-") {
+                            if crate::core::session::is_uuid(stripped) {
+                                std::path::Path::new(&pane_path)
+                                    .file_name()
+                                    .and_then(|n| n.to_str())
+                                    .filter(|n| !crate::core::session::is_uuid(n))
+                                    .unwrap_or(stripped)
+                            } else {
+                                stripped
+                            }
+                        } else {
+                            session
+                        };
+                        format!(
+                            "{}[{}:{}] {}{:<20} (open)",
+                            marker, clean_name, window_index, turn_icon, window_name
+                        )
+                    }
                 };
                 let match_text = format!(
                     "{} {} {}",
@@ -535,6 +550,20 @@ fn render_preview_content(
                     .add_modifier(Modifier::BOLD),
             )]));
             lines.push(Line::raw(""));
+            let clean_proj = if let Some(stripped) = session.strip_prefix("agy-") {
+                if crate::core::session::is_uuid(stripped) {
+                    std::path::Path::new(pane_path)
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .filter(|n| !crate::core::session::is_uuid(n))
+                        .unwrap_or(stripped)
+                } else {
+                    stripped
+                }
+            } else {
+                session
+            };
+            lines.push(meta_line("Project:", clean_proj));
             lines.push(meta_line("Session:", session));
             lines.push(meta_line("Window Index:", &window_index.to_string()));
             lines.push(meta_line("Path:", pane_path));
@@ -811,7 +840,8 @@ fn load_historical_conversations(
                             COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
                             strftime('%m-%d %H:%M', last_modified_time),
                             COALESCE(NULLIF(project_id, ''), 'main'),
-                            {}
+                            {},
+                            workspace_uris
                      FROM conversation_summaries
                      {}
                      ORDER BY last_modified_time DESC
@@ -825,7 +855,8 @@ fn load_historical_conversations(
                             COALESCE(NULLIF(title, ''), NULLIF(preview, ''), 'Untitled'),
                             strftime('%m-%d %H:%M', last_modified_time),
                             COALESCE(NULLIF(project_id, ''), 'main'),
-                            {}
+                            {},
+                            workspace_uris
                      FROM conversation_summaries
                      WHERE (workspace_uris LIKE ? OR project_id = ? OR ? = ''){hygiene_and}
                      ORDER BY last_modified_time DESC
@@ -838,12 +869,24 @@ fn load_historical_conversations(
         if scope == ScopeArg::Global {
             if let Ok(mut stmt) = conn.prepare(&sql) {
                 let rows = stmt.query_map([limit as i64], |row| {
+                    let conv_id: String = row.get(0)?;
+                    let title: String = row.get(1)?;
+                    let rel_time: String = row.get(2)?;
+                    let raw_proj: String = row.get(3)?;
+                    let steps: i64 = row.get(4)?;
+                    let uris: Option<String> = row.get(5).ok();
+                    let project = crate::core::session::resolve_project_name(
+                        Some(&raw_proj),
+                        uris.as_deref(),
+                        Some(project),
+                    );
+
                     Ok(ItemKind::Historical {
-                        conversation_id: row.get(0)?,
-                        title: row.get(1)?,
-                        relative_time: row.get(2)?,
-                        project: row.get(3)?,
-                        step_count: row.get(4)?,
+                        conversation_id: conv_id,
+                        title,
+                        relative_time: rel_time,
+                        project,
+                        step_count: steps,
                     })
                 });
                 if let Ok(mapped) = rows {
@@ -862,12 +905,24 @@ fn load_historical_conversations(
                 let rows = stmt.query_map(
                     rusqlite::params![filter, project, project, limit as i64],
                     |row| {
+                        let conv_id: String = row.get(0)?;
+                        let title: String = row.get(1)?;
+                        let rel_time: String = row.get(2)?;
+                        let raw_proj: String = row.get(3)?;
+                        let steps: i64 = row.get(4)?;
+                        let uris: Option<String> = row.get(5).ok();
+                        let project = crate::core::session::resolve_project_name(
+                            Some(&raw_proj),
+                            uris.as_deref(),
+                            Some(project),
+                        );
+
                         Ok(ItemKind::Historical {
-                            conversation_id: row.get(0)?,
-                            title: row.get(1)?,
-                            relative_time: row.get(2)?,
-                            project: row.get(3)?,
-                            step_count: row.get(4)?,
+                            conversation_id: conv_id,
+                            title,
+                            relative_time: rel_time,
+                            project,
+                            step_count: steps,
                         })
                     },
                 );
@@ -1048,10 +1103,19 @@ pub fn execute_selection(
             project: target_project,
             ..
         } => {
-            let effective_project = if target_project.is_empty() || target_project == "main" {
-                project
+            let effective_project = if target_project.is_empty()
+                || target_project == "main"
+                || crate::core::session::is_uuid(target_project)
+            {
+                if !project.is_empty() && !crate::core::session::is_uuid(project) {
+                    project.to_string()
+                } else if let Some(dir_name) = workdir.file_name().and_then(|n| n.to_str()) {
+                    dir_name.to_string()
+                } else {
+                    "main".to_string()
+                }
             } else {
-                target_project
+                target_project.to_string()
             };
             if std::env::var("TMUX").is_ok() {
                 let _ = Command::new("tmux")

@@ -122,7 +122,7 @@ impl TmuxProfile {
             .theme
             .status_right
             .as_deref()
-            .unwrap_or("#{?#{@agy_running},#[fg=yellow,bold]● RUNNING  ,}#[fg=magenta]#S #[fg=white]· #[fg=white]%H:%M #[fg=white]· #[fg=white]%Y-%m-%d #[default]");
+            .unwrap_or("#{?#{@agy_running},#[fg=yellow,bold]● RUNNING  ,}#[fg=magenta]#{?#{@agymux_project},#{@agymux_project},#S} #[fg=white]· #[fg=white]%H:%M #[fg=white]· #[fg=white]%Y-%m-%d #[default]");
         lines.push(format!("set -g status-right \"{}\"", status_right));
 
         // Prefix key

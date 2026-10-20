@@ -75,6 +75,11 @@ impl TmuxDriver {
         Self::client().current_window_name()
     }
 
+    /// Find any session starting with "agy-" whose pane_current_path matches `dir`
+    pub fn find_session_by_dir(dir: &Path) -> Option<String> {
+        Self::client().find_session_by_dir(dir)
+    }
+
     pub fn ensure_session(
         name: &str,
         dir: &Path,
@@ -352,5 +357,39 @@ mod tests {
         // mock_exists has no expectation for "has-session -t agy-missing", so it returns error (doesn't exist)
         // and then attempts new-session
         let _ = res2;
+    }
+
+    #[test]
+    fn test_mock_driver_find_session_by_dir() {
+        let mock = MockTmuxRunner::new();
+        let list_panes_out = "other-session\t/home/rockad/projects/other\n\
+                              agy-f2de8c4a-f019-41a1-97b9-a4269a058738\t/home/rockad/projects/doppelganger\n\
+                              agy-myrepo\t/home/rockad/projects/myrepo\n";
+        mock.add_response(
+            &[
+                "list-panes",
+                "-a",
+                "-F",
+                "#{session_name}\t#{pane_current_path}",
+            ],
+            list_panes_out,
+        );
+
+        let client = TmuxDriver::with_runner(mock);
+        let found = client.find_session_by_dir(Path::new("/home/rockad/projects/doppelganger"));
+        assert_eq!(
+            found,
+            Some("agy-f2de8c4a-f019-41a1-97b9-a4269a058738".to_string())
+        );
+
+        let found_myrepo = client.find_session_by_dir(Path::new("/home/rockad/projects/myrepo"));
+        assert_eq!(found_myrepo, Some("agy-myrepo".to_string()));
+
+        let not_found = client.find_session_by_dir(Path::new("/home/rockad/projects/nonexistent"));
+        assert_eq!(not_found, None);
+
+        // Does not match non-agy session even if path matches
+        let non_agy = client.find_session_by_dir(Path::new("/home/rockad/projects/other"));
+        assert_eq!(non_agy, None);
     }
 }
