@@ -230,7 +230,9 @@ impl PaletteState {
                     PaletteAction::SwitchTab => {
                         "switch".contains(&q) || "tab".contains(&q) || q == "s" || q == "ы"
                     }
-                    PaletteAction::SwitchProject => "project".contains(&q) || "open".contains(&q) || q == "o" || q == "щ",
+                    PaletteAction::SwitchProject => {
+                        "project".contains(&q) || "open".contains(&q) || q == "o" || q == "щ"
+                    }
                     PaletteAction::BindConversation => {
                         "bind".contains(&q) || "attach".contains(&q) || "connect".contains(&q)
                     }
@@ -352,19 +354,25 @@ pub fn handle_key(key: KeyEvent, state: &mut PaletteState) -> PaletteResult {
     }
 }
 
-fn render_title_with_mnemonic(title: &str, mnemonic: Option<char>, is_selected: bool) -> Vec<Span<'static>> {
+fn render_title_with_mnemonic(
+    title: &str,
+    mnemonic: Option<char>,
+    is_selected: bool,
+) -> Vec<Span<'static>> {
     let base_fg = if is_selected { COLOR_GREEN } else { COLOR_FG };
     let mut base_style = Style::default().fg(base_fg);
     if is_selected {
         base_style = base_style.add_modifier(Modifier::BOLD);
     }
-    let mut mnemonic_style = Style::default().fg(COLOR_YELLOW).add_modifier(Modifier::UNDERLINED);
+    let mut mnemonic_style = Style::default()
+        .fg(COLOR_YELLOW)
+        .add_modifier(Modifier::UNDERLINED);
     if is_selected {
         mnemonic_style = mnemonic_style.add_modifier(Modifier::BOLD);
     }
 
     if let Some(m) = mnemonic {
-        if let Some(idx) = title.chars().position(|c| c.to_ascii_lowercase() == m.to_ascii_lowercase()) {
+        if let Some(idx) = title.chars().position(|c| c.eq_ignore_ascii_case(&m)) {
             let (before, rest) = title.split_at(idx);
             let char_len = rest.chars().next().map_or(1, |c| c.len_utf8());
             let (ch_str, after) = rest.split_at(char_len);
@@ -435,10 +443,12 @@ pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
             let item = &state.items[item_idx];
             let is_selected = display_idx == state.selected;
 
-            let mut spans = vec![
-                Span::styled(format!(" {} ", item.icon), Style::default()),
-            ];
-            spans.extend(render_title_with_mnemonic(item.title, item.mnemonic, is_selected));
+            let mut spans = vec![Span::styled(format!(" {} ", item.icon), Style::default())];
+            spans.extend(render_title_with_mnemonic(
+                item.title,
+                item.mnemonic,
+                is_selected,
+            ));
             spans.push(Span::styled(
                 format!("({})", item.shortcut),
                 if is_selected {
