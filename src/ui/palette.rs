@@ -40,6 +40,7 @@ pub struct PaletteItem {
     pub icon: &'static str,
     pub title: &'static str,
     pub shortcut: &'static str,
+    pub mnemonic: Option<char>,
 }
 
 impl PaletteItem {
@@ -49,103 +50,120 @@ impl PaletteItem {
                 action: PaletteAction::SwitchTab,
                 icon: "🗂️ ",
                 title: "Switch Tab / Session",
-                shortcut: "Ctrl+Space b / и",
+                shortcut: "Ctrl+Space s / ы",
+                mnemonic: Some('s'),
             },
             PaletteItem {
                 action: PaletteAction::SwitchProject,
                 icon: "🌐",
-                title: "Switch Project",
-                shortcut: "Ctrl+Space p / з",
+                title: "Open Project",
+                shortcut: "Ctrl+Space o / щ",
+                mnemonic: Some('o'),
             },
             PaletteItem {
                 action: PaletteAction::NewTab,
                 icon: "➕",
-                title: "New Tab",
+                title: "New Conversation Tab",
                 shortcut: "Ctrl+Space c / с",
+                mnemonic: Some('c'),
             },
             PaletteItem {
                 action: PaletteAction::RenameTab,
                 icon: "📝",
                 title: "Rename Tab",
                 shortcut: "Ctrl+Space r / к",
+                mnemonic: Some('r'),
             },
             PaletteItem {
                 action: PaletteAction::CloseTab,
                 icon: "🧹",
-                title: "Close Tab",
+                title: "Close Tab [x]",
                 shortcut: "Ctrl+Space x / ч",
+                mnemonic: Some('x'),
             },
             PaletteItem {
                 action: PaletteAction::Detach,
                 icon: "🚪",
                 title: "Detach Session",
                 shortcut: "Ctrl+Space d / в",
+                mnemonic: Some('d'),
             },
             PaletteItem {
                 action: PaletteAction::QuitKeepTabs,
                 icon: "🚪",
-                title: "Quit Cockpit (Keep Tabs Running)",
+                title: "Quit Cockpit (keep tabs)",
                 shortcut: "Ctrl+Space d / в",
+                mnemonic: Some('d'),
             },
             PaletteItem {
                 action: PaletteAction::KillSession,
                 icon: "🛑",
-                title: "Kill Session (Exit Completely)",
+                title: "Kill Session",
                 shortcut: "Ctrl+Space k / л",
+                mnemonic: Some('k'),
             },
             PaletteItem {
                 action: PaletteAction::Shortcuts,
                 icon: "❓",
-                title: "Keyboard Shortcuts",
-                shortcut: "Ctrl+Space ? / h / р",
+                title: "Help & Shortcuts",
+                shortcut: "Ctrl+Space h / р",
+                mnemonic: Some('h'),
             },
             PaletteItem {
                 action: PaletteAction::BindConversation,
                 icon: "🔗",
                 title: "Bind Conversation to Tab",
                 shortcut: "Palette action",
+                mnemonic: None,
             },
             PaletteItem {
                 action: PaletteAction::NewTerminalTab,
                 icon: "💻",
-                title: "New Plain Terminal Tab",
+                title: "New Terminal Tab",
                 shortcut: "Ctrl+Space t / е",
+                mnemonic: Some('t'),
             },
             PaletteItem {
                 action: PaletteAction::SwitchToMain,
                 icon: "🖥️ ",
-                title: "Switch to Main Terminal (main)",
+                title: "Switch to Main Terminal",
                 shortcut: "Ctrl+Space m / ь",
+                mnemonic: Some('m'),
             },
             PaletteItem {
                 action: PaletteAction::ForkConversation,
                 icon: "🌿",
                 title: "Fork Conversation",
                 shortcut: "Ctrl+Space f / а",
+                mnemonic: Some('f'),
             },
             PaletteItem {
                 action: PaletteAction::NewWorktreeTab,
                 icon: "📁",
                 title: "New Worktree Tab",
                 shortcut: "Ctrl+Space w / ц",
+                mnemonic: Some('w'),
             },
             PaletteItem {
                 action: PaletteAction::LaunchCustomFlags,
                 icon: "⚙️ ",
                 title: "Launch with Custom Flags",
                 shortcut: "Ctrl+Space l / д",
+                mnemonic: Some('l'),
             },
             PaletteItem {
                 action: PaletteAction::ReloadActiveSession,
                 icon: "🔄",
                 title: "Reload active session (-c)",
                 shortcut: "Palette",
+                mnemonic: None,
             },
             PaletteItem {
                 action: PaletteAction::ToggleIdeLayout,
                 icon: "📑",
                 title: "Toggle IDE Sidebar Layout",
                 shortcut: "Deprecated",
+                mnemonic: None,
             },
         ]
     }
@@ -191,6 +209,11 @@ impl PaletteState {
                 if title.contains(&q) || shortcut.contains(&q) {
                     return true;
                 }
+                if let Some(m) = item.mnemonic {
+                    if q == m.to_string().to_lowercase() {
+                        return true;
+                    }
+                }
                 // Synonyms & keywords
                 match item.action {
                     PaletteAction::QuitKeepTabs => {
@@ -205,9 +228,9 @@ impl PaletteState {
                     }
                     PaletteAction::Detach => "detach".contains(&q) || q == "d" || q == "в",
                     PaletteAction::SwitchTab => {
-                        "switch".contains(&q) || "tab".contains(&q) || q == "b" || q == "и"
+                        "switch".contains(&q) || "tab".contains(&q) || q == "s" || q == "ы"
                     }
-                    PaletteAction::SwitchProject => "project".contains(&q) || q == "p" || q == "з",
+                    PaletteAction::SwitchProject => "project".contains(&q) || "open".contains(&q) || q == "o" || q == "щ",
                     PaletteAction::BindConversation => {
                         "bind".contains(&q) || "attach".contains(&q) || "connect".contains(&q)
                     }
@@ -329,6 +352,38 @@ pub fn handle_key(key: KeyEvent, state: &mut PaletteState) -> PaletteResult {
     }
 }
 
+fn render_title_with_mnemonic(title: &str, mnemonic: Option<char>, is_selected: bool) -> Vec<Span<'static>> {
+    let base_fg = if is_selected { COLOR_GREEN } else { COLOR_FG };
+    let mut base_style = Style::default().fg(base_fg);
+    if is_selected {
+        base_style = base_style.add_modifier(Modifier::BOLD);
+    }
+    let mut mnemonic_style = Style::default().fg(COLOR_YELLOW).add_modifier(Modifier::UNDERLINED);
+    if is_selected {
+        mnemonic_style = mnemonic_style.add_modifier(Modifier::BOLD);
+    }
+
+    if let Some(m) = mnemonic {
+        if let Some(idx) = title.chars().position(|c| c.to_ascii_lowercase() == m.to_ascii_lowercase()) {
+            let (before, rest) = title.split_at(idx);
+            let char_len = rest.chars().next().map_or(1, |c| c.len_utf8());
+            let (ch_str, after) = rest.split_at(char_len);
+            let total_len = title.chars().count();
+            let padding_len = 26_usize.saturating_sub(total_len);
+            let padding = " ".repeat(padding_len);
+
+            return vec![
+                Span::styled(before.to_string(), base_style),
+                Span::styled(ch_str.to_string(), mnemonic_style),
+                Span::styled(after.to_string(), base_style),
+                Span::styled(padding, base_style),
+            ];
+        }
+    }
+    let title_string = format!("{:<26}", title);
+    vec![Span::styled(title_string, base_style)]
+}
+
 pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
     let width = 68.min(area.width.saturating_sub(4));
     let height = 18.min(area.height.saturating_sub(2));
@@ -380,27 +435,19 @@ pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
             let item = &state.items[item_idx];
             let is_selected = display_idx == state.selected;
 
-            let line = Line::from(vec![
+            let mut spans = vec![
                 Span::styled(format!(" {} ", item.icon), Style::default()),
-                Span::styled(
-                    format!("{:<26}", item.title),
-                    if is_selected {
-                        Style::default()
-                            .fg(COLOR_GREEN)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        Style::default().fg(COLOR_FG)
-                    },
-                ),
-                Span::styled(
-                    format!("({})", item.shortcut),
-                    if is_selected {
-                        Style::default().fg(COLOR_YELLOW)
-                    } else {
-                        muted_style()
-                    },
-                ),
-            ]);
+            ];
+            spans.extend(render_title_with_mnemonic(item.title, item.mnemonic, is_selected));
+            spans.push(Span::styled(
+                format!("({})", item.shortcut),
+                if is_selected {
+                    Style::default().fg(COLOR_YELLOW)
+                } else {
+                    muted_style()
+                },
+            ));
+            let line = Line::from(spans);
 
             if is_selected {
                 ListItem::new(line).style(highlight_style())

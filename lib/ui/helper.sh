@@ -29,7 +29,7 @@ printf "  ${ANSI_BOLD}${ANSI_PURPLE}╰─────────────�
 printf "  ${ANSI_BOLD}${ANSI_ACTIVE_CYAN}▌ TAB NAVIGATION & MOVEMENT${ANSI_RESET}\n"
 printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Alt + 1..9" "Jump directly to tab 1..9 (layout-independent)"
 printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Alt + Left / Right" "Cycle to previous / next tab"
-printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space s  /  ы" "Two-pane tab & conversation switcher"
+printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space s  /  S  /  ы  /  Ы" "Two-pane tab & conversation switcher"
 printf "\n"
 
 printf "  ${ANSI_BOLD}${ANSI_ACTIVE_CYAN}▌ CONVERSATION & WORKTREE LIFECYCLE${ANSI_RESET}\n"
@@ -43,8 +43,8 @@ printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space d  /  в" "
 printf "\n"
 
 printf "  ${ANSI_BOLD}${ANSI_ACTIVE_CYAN}▌ MODALS & GLOBAL CONTROLS${ANSI_RESET}\n"
-printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space p  /  з" "Quick Command Palette (all actions menu)"
-printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space P  /  З" "Global Project Switcher"
+printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space p  /  P  /  з  /  З" "Quick Command Palette (all actions menu)"
+printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space o  /  O  /  щ  /  Щ" "Global Project Switcher"
 printf "    ${ANSI_ACTIVE_GREEN}%-26s${ANSI_RESET} %s\n" "Ctrl+Space ?  /  h  /  р" "Display this shortcuts cheatsheet"
 printf "\n"
 

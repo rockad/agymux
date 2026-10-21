@@ -20,8 +20,8 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 - **Two-Pane Conversation Switcher (`Ctrl+Space s` / `ы`):**
   - **Left Pane (45%):** Active open tabs and historical project conversations with fuzzy search. Supports `Tab` or `Ctrl+A` to toggle between **Local Project** and **Global Machine** search scope.
   - **Right Pane (55%):** Live rich transcript preview showing token counts, user prompt, latest turn excerpt, and executed tools.
-- **Global Project Hopper (`Ctrl+Space P` / `З`):** Search and jump between repositories across `~/projects/` and active `agy-*` sessions.
-- **Quick Command Palette (`Ctrl+Space p` / `з`):** Interactive action palette (tab rename, bind, fork, new worktree, launch flags, layout toggle, quit cockpit, cheatsheet).
+- **Global Project Hopper (`Ctrl+Space o` / `щ`):** Search and jump between repositories across `~/projects/` and active `agy-*` sessions.
+- **Quick Command Palette (`Ctrl+Space p` / `з`):** Interactive action palette (tab rename, bind, fork, new worktree, launch flags, quit cockpit, cheatsheet).
 - **Git Worktree Isolation (`Ctrl+Space w` / `ц`):** Create isolated git worktrees on demand under `.worktrees/<branch>`.
 - **Bilingual Keymap Resilience:** Every shortcut features paired English and Cyrillic (RussianWin) bindings so CapsLock layout switching never produces dead keys.
 - **Instant Prompt-Based Naming:** Windows are named immediately from the first prompt argument, updated dynamically in the background with automatic title reconciliation.
@@ -32,22 +32,20 @@ It combines OpenCode's visual delight and spatial workflow ergonomics (top tab s
 
 | Action | Direct Shortcut | Command Palette Name |
 | :--- | :--- | :--- |
-| **Switch Tab / Session** | `Ctrl+Space s` / `ы` | `🗂️ Switch Tab / Session` |
-| **Switch Project** | `Ctrl+Space P` / `З` | `🌐 Switch Project` |
-| **Command Palette** | `Ctrl+Space p` / `з` | `⚙️ Open Command Palette` |
-| **Toggle IDE Sidebar Layout** | `Ctrl+Space B` / `И` | `📐 Toggle IDE Sidebar Layout` |
-| **Keyboard Cheatsheet** | `Ctrl+Space h` / `р` / `?` | `❓ Keyboard Shortcuts & Help` |
-| **New Tab** | `Ctrl+Space c` / `с` | `➕ New Tab` |
-| **Bind Conversation to Tab** | `Ctrl+Space b` / `и` | `🔗 Bind Conversation to Tab` |
-| **New Plain Terminal Tab** | `Ctrl+Space t` / `е` | `💻 New Plain Terminal Tab` |
-| **Switch to Main Terminal** | `Ctrl+Space m` / `ь` | `🖥️ Switch to Main Terminal (main)` |
-| **New Worktree Tab** | `Ctrl+Space w` / `ц` | `📁 New Worktree Tab (Branch)` |
-| **Rename Active Tab** | `Ctrl+Space r` / `к` | `📝 Rename Active Tab` |
-| **Fork Conversation** | `Ctrl+Space f` / `а` | `🌿 Fork Conversation (-c)` |
-| **Launch with Custom Flags** | `Ctrl+Space l` / `д` | `⚙️ Launch with Custom Flags` |
-| **Close Tab** | `Ctrl+Space x` / `ч` | `🧹 Close Tab` |
-| **Quit Cockpit (Keep Tabs)** | `Ctrl+Space q` / `й` | `🚪 Quit Cockpit (Keep Tabs Running)` |
-| **Detach Session** | `Ctrl+Space d` / `в` | `🚪 Detach Session` |
+| **Switch Tab / Session** | `Ctrl+Space s` / `S` / `ы` / `Ы` | `🗂️ Switch Tab / Session` |
+| **Switch Project** | `Ctrl+Space o` / `O` / `щ` / `Щ` | `🌐 Open Project` |
+| **Command Palette** | `Ctrl+Space p` / `P` / `з` / `З` | `⚙️ Open Command Palette` |
+| **Keyboard Cheatsheet** | `Ctrl+Space ?` / `h` / `H` / `р` / `Р` | `❓ Keyboard Shortcuts & Help` |
+| **New Tab** | `Ctrl+Space c` / `C` / `с` / `С` | `➕ New Tab` |
+| **New Plain Terminal Tab** | `Ctrl+Space t` / `T` / `е` / `Е` | `💻 New Plain Terminal Tab` |
+| **Switch to Main Terminal** | `Ctrl+Space m` / `M` / `ь` / `Ь` | `🖥️ Switch to Main Terminal (main)` |
+| **New Worktree Tab** | `Ctrl+Space w` / `W` / `ц` / `Ц` | `📁 New Worktree Tab (Branch)` |
+| **Rename Active Tab** | `Ctrl+Space r` / `R` / `к` / `К` | `📝 Rename Active Tab` |
+| **Fork Conversation** | `Ctrl+Space f` / `F` / `а` / `А` | `🌿 Fork Conversation (-c)` |
+| **Launch with Custom Flags** | `Ctrl+Space l` / `L` / `д` / `Д` | `⚙️ Launch with Custom Flags` |
+| **Close Tab** | `Ctrl+Space x` / `X` / `ч` / `Ч` | `🧹 Close Tab` |
+| **Detach Session** | `Ctrl+Space d` / `D` / `в` / `В` | `🚪 Detach Session` |
+| **Kill Session** | `Ctrl+Space k` / `K` / `л` / `Л` | `🛑 Kill Session (Exit Completely)` |
 | **Direct Tab Jump** | `Alt+1` .. `9` / `Ctrl+Space 1` .. `9` | N/A |
 | **Cycle Adjacent Tabs** | `Alt+Left` / `Right` / `Ctrl+Space Left` / `Right` | N/A |
 

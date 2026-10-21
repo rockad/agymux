@@ -132,16 +132,16 @@ impl TmuxProfile {
 
         // Keybindings & popups
         // Switcher (2-pane switcher with live preview)
-        lines.push("bind b display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
-        lines.push("bind B display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+        lines.push("bind s display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+        lines.push("bind S display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
 
         // Project switcher
-        lines.push("bind p display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
-        lines.push("bind P display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+        lines.push("bind o display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+        lines.push("bind O display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
 
         // Actions / Command palette
-        lines.push("bind a display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
-        lines.push("bind A display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+        lines.push("bind p display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+        lines.push("bind P display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
 
         // Tab management
         lines.push("bind c new-window -n \"+ new\" \"agymux run\"".to_string());
@@ -177,14 +177,14 @@ impl TmuxProfile {
         // Bilingual Cyrillic bindings
         if cyrillic {
             lines.push("# Bilingual RussianWin pairings".to_string());
-            lines.push("bind и display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
-            lines.push("bind И display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+            lines.push("bind ы display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
+            lines.push("bind Ы display-popup -E -w 85% -h 75% \"agymux switch\"".to_string());
 
-            lines.push("bind з display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
-            lines.push("bind З display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+            lines.push("bind щ display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
+            lines.push("bind Щ display-popup -E -w 85% -h 70% \"agymux project\"".to_string());
 
-            lines.push("bind ф display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
-            lines.push("bind Ф display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+            lines.push("bind з display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
+            lines.push("bind З display-popup -E -w 75% -h 60% \"agymux palette\"".to_string());
 
             lines.push("bind с new-window -n \"+ new\" \"agymux run\"".to_string());
             lines.push("bind С new-window -n \"+ new\" \"agymux run\"".to_string());
@@ -314,12 +314,12 @@ mod tests {
         assert!(
             content.contains("bind K confirm-before -p \"Kill session #S? (y/n)\" kill-session")
         );
-        assert!(content.contains("bind b display-popup -E -w 85% -h 75% \"agymux switch\""));
-        assert!(content.contains("bind B display-popup -E -w 85% -h 75% \"agymux switch\""));
-        assert!(content.contains("bind p display-popup -E -w 85% -h 70% \"agymux project\""));
-        assert!(content.contains("bind P display-popup -E -w 85% -h 70% \"agymux project\""));
-        assert!(content.contains("bind a display-popup -E -w 75% -h 60% \"agymux palette\""));
-        assert!(content.contains("bind A display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind s display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind S display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind o display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind O display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind p display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind P display-popup -E -w 75% -h 60% \"agymux palette\""));
         assert!(!content.contains("C-S-p"));
         assert!(!content.contains("C-S-P"));
         assert!(content.contains("bind-key -n M-1 select-window -t :1"));
@@ -344,12 +344,12 @@ mod tests {
         // Check cyrillic bindings by default
         assert!(content.contains("bind с new-window -n \"+ new\" \"agymux run\""));
         assert!(content.contains("bind С new-window -n \"+ new\" \"agymux run\""));
-        assert!(content.contains("bind и display-popup -E -w 85% -h 75% \"agymux switch\""));
-        assert!(content.contains("bind И display-popup -E -w 85% -h 75% \"agymux switch\""));
-        assert!(content.contains("bind з display-popup -E -w 85% -h 70% \"agymux project\""));
-        assert!(content.contains("bind З display-popup -E -w 85% -h 70% \"agymux project\""));
-        assert!(content.contains("bind ф display-popup -E -w 75% -h 60% \"agymux palette\""));
-        assert!(content.contains("bind Ф display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind ы display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind Ы display-popup -E -w 85% -h 75% \"agymux switch\""));
+        assert!(content.contains("bind щ display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind Щ display-popup -E -w 85% -h 70% \"agymux project\""));
+        assert!(content.contains("bind з display-popup -E -w 75% -h 60% \"agymux palette\""));
+        assert!(content.contains("bind З display-popup -E -w 75% -h 60% \"agymux palette\""));
         assert!(content.contains("bind в detach-client"));
         assert!(content.contains("bind В detach-client"));
         assert!(

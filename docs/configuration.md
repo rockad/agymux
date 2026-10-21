@@ -60,7 +60,7 @@ isolated_socket = false
 
 | Key | Type | Default | Choices / Format | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `projects_dir` | `string` | `"~/projects"` | Filesystem path | Root directory recursively scanned by Project Switcher (`Ctrl+Space P` / `З`) for git repositories and workspaces. |
+| `projects_dir` | `string` | `"~/projects"` | Filesystem path | Root directory recursively scanned by Project Switcher (`Ctrl+Space o` / `O` / `щ` / `Щ`) for git repositories and workspaces. |
 | `default_model` | `string` | `"Gemini 3.6 Flash (Medium)"` | Any Antigravity model name | Default model preselected when creating new conversation tabs. |
 | `default_effort` | `string` | `"medium"` | `"none"`, `"low"`, `"medium"`, `"high"` | Default thinking / reasoning effort level passed to Antigravity sessions. |
 | `startup_action` | `string` | `"ask"` | `"new"`, `"resume_latest"`, `"picker"`, `"terminal"`, `"ask"` | Cockpit launch behavior when invoked without command arguments. |

@@ -95,7 +95,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Cycle to previous / next tab",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space b  /  B  /  и  /  И",
+        "Ctrl+Space s  /  S  /  ы  /  Ы",
         "Two-pane tab & conversation switcher",
     ));
     text_lines.push(Line::raw(""));
@@ -145,11 +145,11 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
     )]));
     text_lines.push(shortcut_line(
-        "Ctrl+Space p",
+        "Ctrl+Space p  /  P  /  з  /  З",
         "Quick Command Palette (all actions menu)",
     ));
     text_lines.push(shortcut_line(
-        "Ctrl+Space P  /  з  /  З",
+        "Ctrl+Space o  /  O  /  щ  /  Щ",
         "Global Project Switcher",
     ));
     text_lines.push(shortcut_line(
