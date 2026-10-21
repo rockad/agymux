@@ -1,6 +1,6 @@
 [package]
 name = "agymux"
-version = "0.2.1"
+version = "0.3.0"
 default-run = "agymux"
 edition = "2021"
 authors = ["Aleksandr Korolev"]
