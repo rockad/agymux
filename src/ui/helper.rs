@@ -74,7 +74,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
 
     // Title line
     text_lines.push(Line::from(vec![Span::styled(
-        "agymux v0.2 — Keyboard Shortcuts & Commands",
+        format!(
+            "agymux v{} — Keyboard Shortcuts & Commands",
+            env!("CARGO_PKG_VERSION")
+        ),
         Style::default()
             .fg(COLOR_PURPLE)
             .add_modifier(Modifier::BOLD),

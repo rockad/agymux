@@ -1,6 +1,7 @@
 [package]
 name = "agymux"
 version = "0.2.1"
+default-run = "agymux"
 edition = "2021"
 authors = ["Aleksandr Korolev"]
 description = "OpenCode-style tabbed cockpit for Google Antigravity"

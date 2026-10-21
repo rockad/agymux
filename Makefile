@@ -4,7 +4,7 @@ DIST_DIR ?= dist
 PKG_NAME = agymux-v$(VERSION)-$(TARGET)
 PKG_DIR = $(DIST_DIR)/$(PKG_NAME)
 
-.PHONY: all build check test lint fmt fmt-check bench clean dist package checksums install uninstall cross-check cross-build help
+.PHONY: all build check test lint fmt fmt-check bench clean dist package checksums install uninstall cross-check cross-build changelog bump release help
 
 all: build
 
@@ -23,6 +23,8 @@ help:
 	@echo "  cross-build   - Build musl and aarch64 release binaries using cross"
 	@echo "  install       - Install agymux and ax into ~/.local/bin"
 	@echo "  uninstall     - Remove agymux and ax from ~/.local/bin"
+	@echo "  changelog     - Generate CHANGELOG.md via git-cliff"
+	@echo "  release       - Bump version according to semver and tag release"
 	@echo "  clean         - Clean build target directory and dist/"
 
 build:
@@ -97,3 +99,11 @@ install: build
 uninstall:
 	@rm -f $(HOME)/.local/bin/agymux $(HOME)/.local/bin/ax
 	@echo "Removed agymux and ax from $(HOME)/.local/bin"
+
+changelog:
+	@which git-cliff >/dev/null 2>&1 && git-cliff --output CHANGELOG.md || bun x git-cliff --output CHANGELOG.md
+
+bump:
+	@bash scripts/release.sh
+
+release: bump

@@ -6,10 +6,15 @@ use std::path::PathBuf;
     name = "agymux",
     author = "Aleksandr Korolev",
     version,
+    disable_version_flag = true,
     about = "OpenCode-style tabbed cockpit for Google Antigravity",
     long_about = "A high-performance terminal multiplexer workspace manager for Google Antigravity (agy). Provides multi-turn tab navigation, instant window naming, and rich session search inside tmux."
 )]
 pub struct Cli {
+    /// Print version information
+    #[arg(short = 'v', short_alias = 'V', long = "version", action = clap::ArgAction::Version)]
+    pub version: Option<bool>,
+
     /// Override project session name (default: git root or folder name)
     #[arg(short = 'p', long = "project", global = true)]
     pub project: Option<String>,
@@ -141,6 +146,21 @@ mod tests {
         assert!(cli.project.is_none());
         assert!(cli.dir.is_none());
         assert!(!cli.direct);
+    }
+
+    #[test]
+    fn test_cli_version_flag() {
+        let err_v =
+            Cli::try_parse_from(["agymux", "-v"]).expect_err("-v should trigger version display");
+        assert_eq!(err_v.kind(), clap::error::ErrorKind::DisplayVersion);
+
+        let err_upper =
+            Cli::try_parse_from(["agymux", "-V"]).expect_err("-V should trigger version display");
+        assert_eq!(err_upper.kind(), clap::error::ErrorKind::DisplayVersion);
+
+        let err_long = Cli::try_parse_from(["agymux", "--version"])
+            .expect_err("--version should trigger version display");
+        assert_eq!(err_long.kind(), clap::error::ErrorKind::DisplayVersion);
     }
 
     #[test]
