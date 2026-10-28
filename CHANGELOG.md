@@ -1,8 +1,17 @@
+## [0.5.0] - 2026-10-28
+
+### 🚀 Features
+
+- *(core)* Unify tab registry, race-free mouse close, and consolidate tmux driver
 ## [0.4.0] - 2026-10-28
 
 ### 🚀 Features
 
 - *(palette)* Add window splits, tmux controls, and clean aligned layout
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bump version to 0.4.0
 ## [0.3.0] - 2026-10-21
 
 ### 🚀 Features
