@@ -38,10 +38,12 @@ fn test_helper_modal_render_and_scroll() {
     assert!(rendered_text.contains("Keyboard Shortcuts"));
     assert!(rendered_text.contains("TAB NAVIGATION & MOVEMENT"));
     assert!(rendered_text.contains("CONVERSATION & WORKTREE LIFECYCLE"));
+    assert!(rendered_text.contains("WINDOW SPLITS & PANES"));
     assert!(rendered_text.contains("Ctrl+Space 1..9"));
     assert!(rendered_text.contains("Ctrl+Space c"));
     assert!(rendered_text.contains("Ctrl+Space s"));
-    assert!(rendered_text.contains("Ctrl+Space p"));
+    assert!(rendered_text.contains("Ctrl+Space %"));
+    assert!(rendered_text.contains("Ctrl+Space z"));
 
     // Test scrolling logic
     assert_eq!(state.scroll, 0);
@@ -49,6 +51,21 @@ fn test_helper_modal_render_and_scroll() {
     assert!(!helper::handle_key(down_key, &mut state));
     assert_eq!(state.scroll, 1);
 
+    // Scroll down further to see Modals & Global Controls
+    state.scroll = 10;
+    terminal
+        .draw(|f| helper::render(f, f.area(), &state))
+        .unwrap();
+    let scrolled_text: String = terminal
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(scrolled_text.contains("Ctrl+Space p"));
+
+    state.scroll = 1;
     let up_key = KeyEvent::new(KeyCode::Up, KeyModifiers::NONE);
     assert!(!helper::handle_key(up_key, &mut state));
     assert_eq!(state.scroll, 0);
@@ -64,7 +81,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 17);
+    assert_eq!(state.items.len(), 22);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -99,6 +116,49 @@ fn test_palette_modal_render_and_fuzzy_filter() {
         state.selected_action(),
         Some(PaletteAction::ReloadActiveSession)
     );
+
+    // Test query for "horizontal" finds SplitHorizontal
+    state.query.clear();
+    for c in "horizontal".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(
+        state.selected_action(),
+        Some(PaletteAction::SplitHorizontal)
+    );
+
+    // Test query for "vertical" finds SplitVertical
+    state.query.clear();
+    for c in "vertical".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::SplitVertical));
+
+    // Test query for "zoom" finds TogglePaneZoom
+    state.query.clear();
+    for c in "zoom".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::TogglePaneZoom));
+
+    // Test query for "copy" / "scroll" finds CopyMode
+    state.query.clear();
+    for c in "copy".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::CopyMode));
 
     // Test query for "quit" / "exit" finds QuitKeepTabs
     state.query.clear();

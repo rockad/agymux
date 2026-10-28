@@ -31,13 +31,17 @@ pub enum PaletteAction {
     NewTerminalTab,
     SwitchToMain,
     ReloadActiveSession,
-    ToggleIdeLayout,
+    SplitHorizontal,
+    SplitVertical,
+    TogglePaneZoom,
+    BreakPane,
+    CopyMode,
+    ClosePane,
 }
 
 #[derive(Debug, Clone)]
 pub struct PaletteItem {
     pub action: PaletteAction,
-    pub icon: &'static str,
     pub title: &'static str,
     pub shortcut: &'static str,
     pub mnemonic: Option<char>,
@@ -48,121 +52,134 @@ impl PaletteItem {
         vec![
             PaletteItem {
                 action: PaletteAction::SwitchTab,
-                icon: "🗂️ ",
                 title: "Switch Tab / Session",
                 shortcut: "Ctrl+Space s / ы",
                 mnemonic: Some('s'),
             },
             PaletteItem {
                 action: PaletteAction::SwitchProject,
-                icon: "🌐",
                 title: "Open Project",
                 shortcut: "Ctrl+Space o / щ",
                 mnemonic: Some('o'),
             },
             PaletteItem {
                 action: PaletteAction::NewTab,
-                icon: "➕",
                 title: "New Conversation Tab",
                 shortcut: "Ctrl+Space c / с",
                 mnemonic: Some('c'),
             },
             PaletteItem {
                 action: PaletteAction::RenameTab,
-                icon: "📝",
                 title: "Rename Tab",
                 shortcut: "Ctrl+Space r / к",
                 mnemonic: Some('r'),
             },
             PaletteItem {
                 action: PaletteAction::CloseTab,
-                icon: "🧹",
-                title: "Close Tab [x]",
+                title: "Close Tab",
                 shortcut: "Ctrl+Space x / ч",
                 mnemonic: Some('x'),
             },
             PaletteItem {
+                action: PaletteAction::SplitHorizontal,
+                title: "Split Window Horizontally",
+                shortcut: "Ctrl+Space %",
+                mnemonic: Some('h'),
+            },
+            PaletteItem {
+                action: PaletteAction::SplitVertical,
+                title: "Split Window Vertically",
+                shortcut: "Ctrl+Space \"",
+                mnemonic: Some('v'),
+            },
+            PaletteItem {
+                action: PaletteAction::TogglePaneZoom,
+                title: "Toggle Pane Zoom",
+                shortcut: "Ctrl+Space z",
+                mnemonic: Some('z'),
+            },
+            PaletteItem {
+                action: PaletteAction::BreakPane,
+                title: "Break Pane to New Tab",
+                shortcut: "Ctrl+Space !",
+                mnemonic: None,
+            },
+            PaletteItem {
+                action: PaletteAction::CopyMode,
+                title: "Scroll / Copy Mode",
+                shortcut: "Ctrl+Space [",
+                mnemonic: None,
+            },
+            PaletteItem {
+                action: PaletteAction::ClosePane,
+                title: "Close Current Pane",
+                shortcut: "Ctrl+Space x",
+                mnemonic: None,
+            },
+            PaletteItem {
                 action: PaletteAction::Detach,
-                icon: "🚪",
                 title: "Detach Session",
                 shortcut: "Ctrl+Space d / в",
                 mnemonic: Some('d'),
             },
             PaletteItem {
                 action: PaletteAction::QuitKeepTabs,
-                icon: "🚪",
                 title: "Quit Cockpit (keep tabs)",
                 shortcut: "Ctrl+Space d / в",
                 mnemonic: Some('d'),
             },
             PaletteItem {
                 action: PaletteAction::KillSession,
-                icon: "🛑",
                 title: "Kill Session",
                 shortcut: "Ctrl+Space k / л",
                 mnemonic: Some('k'),
             },
             PaletteItem {
                 action: PaletteAction::Shortcuts,
-                icon: "❓",
                 title: "Help & Shortcuts",
                 shortcut: "Ctrl+Space h / р",
                 mnemonic: Some('h'),
             },
             PaletteItem {
                 action: PaletteAction::BindConversation,
-                icon: "🔗",
                 title: "Bind Conversation to Tab",
                 shortcut: "Palette action",
                 mnemonic: None,
             },
             PaletteItem {
                 action: PaletteAction::NewTerminalTab,
-                icon: "💻",
                 title: "New Terminal Tab",
                 shortcut: "Ctrl+Space t / е",
                 mnemonic: Some('t'),
             },
             PaletteItem {
                 action: PaletteAction::SwitchToMain,
-                icon: "🖥️ ",
                 title: "Switch to Main Terminal",
                 shortcut: "Ctrl+Space m / ь",
                 mnemonic: Some('m'),
             },
             PaletteItem {
                 action: PaletteAction::ForkConversation,
-                icon: "🌿",
                 title: "Fork Conversation",
                 shortcut: "Ctrl+Space f / а",
                 mnemonic: Some('f'),
             },
             PaletteItem {
                 action: PaletteAction::NewWorktreeTab,
-                icon: "📁",
                 title: "New Worktree Tab",
                 shortcut: "Ctrl+Space w / ц",
                 mnemonic: Some('w'),
             },
             PaletteItem {
                 action: PaletteAction::LaunchCustomFlags,
-                icon: "⚙️ ",
                 title: "Launch with Custom Flags",
                 shortcut: "Ctrl+Space l / д",
                 mnemonic: Some('l'),
             },
             PaletteItem {
                 action: PaletteAction::ReloadActiveSession,
-                icon: "🔄",
-                title: "Reload active session (-c)",
+                title: "Reload Active Session",
                 shortcut: "Palette",
-                mnemonic: None,
-            },
-            PaletteItem {
-                action: PaletteAction::ToggleIdeLayout,
-                icon: "📑",
-                title: "Toggle IDE Sidebar Layout",
-                shortcut: "Deprecated",
                 mnemonic: None,
             },
         ]
@@ -259,11 +276,43 @@ impl PaletteState {
                             || q == "r"
                             || q == "к"
                     }
-                    PaletteAction::ToggleIdeLayout => {
-                        "layout".contains(&q)
-                            || "sidebar".contains(&q)
-                            || "rail".contains(&q)
-                            || "ide".contains(&q)
+                    PaletteAction::SplitHorizontal => {
+                        "split".contains(&q)
+                            || "horizontal".contains(&q)
+                            || "pane".contains(&q)
+                            || q == "h"
+                            || q == "%"
+                    }
+                    PaletteAction::SplitVertical => {
+                        "split".contains(&q)
+                            || "vertical".contains(&q)
+                            || "pane".contains(&q)
+                            || q == "v"
+                            || q == "\""
+                    }
+                    PaletteAction::TogglePaneZoom => {
+                        "zoom".contains(&q)
+                            || "maximize".contains(&q)
+                            || "fullscreen".contains(&q)
+                            || "pane".contains(&q)
+                            || q == "z"
+                            || q == "я"
+                    }
+                    PaletteAction::BreakPane => {
+                        "break".contains(&q) || "pane".contains(&q) || q == "!"
+                    }
+                    PaletteAction::CopyMode => {
+                        "copy".contains(&q)
+                            || "scroll".contains(&q)
+                            || "history".contains(&q)
+                            || q == "["
+                            || q == "х"
+                    }
+                    PaletteAction::ClosePane => {
+                        "close".contains(&q)
+                            || "pane".contains(&q)
+                            || q == "kill-pane"
+                            || q == "killpane"
                     }
                     _ => false,
                 }
@@ -371,14 +420,19 @@ fn render_title_with_mnemonic(
         mnemonic_style = mnemonic_style.add_modifier(Modifier::BOLD);
     }
 
+    let total_len = title.chars().count();
+    let padding_len = 30_usize.saturating_sub(total_len);
+    let padding = " ".repeat(padding_len);
+
     if let Some(m) = mnemonic {
-        if let Some(idx) = title.chars().position(|c| c.eq_ignore_ascii_case(&m)) {
-            let (before, rest) = title.split_at(idx);
-            let char_len = rest.chars().next().map_or(1, |c| c.len_utf8());
-            let (ch_str, after) = rest.split_at(char_len);
-            let total_len = title.chars().count();
-            let padding_len = 26_usize.saturating_sub(total_len);
-            let padding = " ".repeat(padding_len);
+        if let Some((byte_idx, _)) = title
+            .char_indices()
+            .find(|(_, c)| c.eq_ignore_ascii_case(&m))
+        {
+            let before = &title[..byte_idx];
+            let char_len = title[byte_idx..].chars().next().map_or(1, |c| c.len_utf8());
+            let ch_str = &title[byte_idx..byte_idx + char_len];
+            let after = &title[byte_idx + char_len..];
 
             return vec![
                 Span::styled(before.to_string(), base_style),
@@ -388,13 +442,15 @@ fn render_title_with_mnemonic(
             ];
         }
     }
-    let title_string = format!("{:<26}", title);
-    vec![Span::styled(title_string, base_style)]
+    vec![
+        Span::styled(title.to_string(), base_style),
+        Span::styled(padding, base_style),
+    ]
 }
 
 pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
-    let width = 68.min(area.width.saturating_sub(4));
-    let height = 18.min(area.height.saturating_sub(2));
+    let width = 74.min(area.width.saturating_sub(4));
+    let height = 22.min(area.height.saturating_sub(2));
 
     let horiz_pad = (area.width.saturating_sub(width)) / 2;
     let vert_pad = (area.height.saturating_sub(height)) / 2;
@@ -443,7 +499,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &PaletteState) {
             let item = &state.items[item_idx];
             let is_selected = display_idx == state.selected;
 
-            let mut spans = vec![Span::styled(format!(" {} ", item.icon), Style::default())];
+            let mut spans = vec![Span::styled("  ", Style::default())];
             spans.extend(render_title_with_mnemonic(
                 item.title,
                 item.mnemonic,
@@ -740,8 +796,29 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
                 println!("No active conversation bound to reload");
             }
         }
-        PaletteAction::ToggleIdeLayout => {
-            crate::run_layout(None)?;
+        PaletteAction::SplitHorizontal => {
+            let _ = Command::new("tmux")
+                .args(["split-window", "-h", "-c", "#{pane_current_path}"])
+                .status();
+        }
+        PaletteAction::SplitVertical => {
+            let _ = Command::new("tmux")
+                .args(["split-window", "-v", "-c", "#{pane_current_path}"])
+                .status();
+        }
+        PaletteAction::TogglePaneZoom => {
+            let _ = Command::new("tmux").args(["resize-pane", "-Z"]).status();
+        }
+        PaletteAction::BreakPane => {
+            let _ = Command::new("tmux").arg("break-pane").status();
+        }
+        PaletteAction::CopyMode => {
+            let _ = Command::new("tmux").arg("copy-mode").status();
+        }
+        PaletteAction::ClosePane => {
+            let _ = Command::new("tmux")
+                .args(["confirm-before", "-p", "kill-pane #P? (y/n)", "kill-pane"])
+                .status();
         }
     }
     Ok(())

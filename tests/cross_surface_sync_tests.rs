@@ -127,7 +127,7 @@ fn test_palette_reload_active_session() {
         "ReloadActiveSession must be in PaletteItem::all()"
     );
     let item = reload_item.unwrap();
-    assert!(item.title.contains("Reload active session"));
+    assert!(item.title.contains("Reload Active Session"));
     assert!(item.shortcut.contains("Palette"));
 
     // Verify filter matching

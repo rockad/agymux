@@ -98,7 +98,20 @@ pub fn run() -> Result<()> {
                     "reload" | "sync" | "refresh" => {
                         ui::palette::PaletteAction::ReloadActiveSession
                     }
-                    "layout" | "rail" | "sidebar" => ui::palette::PaletteAction::ToggleIdeLayout,
+                    "split-h" | "splith" | "split-horizontal" => {
+                        ui::palette::PaletteAction::SplitHorizontal
+                    }
+                    "split-v" | "splitv" | "split-vertical" => {
+                        ui::palette::PaletteAction::SplitVertical
+                    }
+                    "zoom" => ui::palette::PaletteAction::TogglePaneZoom,
+                    "break" | "break-pane" => ui::palette::PaletteAction::BreakPane,
+                    "copy" | "copy-mode" | "scroll" => ui::palette::PaletteAction::CopyMode,
+                    "close-pane" | "kill-pane" => ui::palette::PaletteAction::ClosePane,
+                    "layout" | "rail" | "sidebar" => {
+                        run_layout(None)?;
+                        return Ok(());
+                    }
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;

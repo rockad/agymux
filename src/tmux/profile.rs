@@ -174,6 +174,16 @@ impl TmuxProfile {
             "bind M run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
         );
 
+        // Window splitting & pane management
+        lines.push("bind % split-window -h -c \"#{pane_current_path}\"".to_string());
+        lines.push("bind | split-window -h -c \"#{pane_current_path}\"".to_string());
+        lines.push("bind '\"' split-window -v -c \"#{pane_current_path}\"".to_string());
+        lines.push("bind - split-window -v -c \"#{pane_current_path}\"".to_string());
+        lines.push("bind z resize-pane -Z".to_string());
+        lines.push("bind Z resize-pane -Z".to_string());
+        lines.push("bind ! break-pane".to_string());
+        lines.push("bind [ copy-mode".to_string());
+
         // Bilingual Cyrillic bindings
         if cyrillic {
             lines.push("# Bilingual RussianWin pairings".to_string());
@@ -217,6 +227,11 @@ impl TmuxProfile {
             lines.push(
                 "bind Ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\"".to_string(),
             );
+
+            lines.push("bind я resize-pane -Z".to_string());
+            lines.push("bind Я resize-pane -Z".to_string());
+            lines.push("bind х copy-mode".to_string());
+            lines.push("bind Х copy-mode".to_string());
         }
 
         // Direct tab switching (prefix-less Alt + 1..9)
@@ -341,6 +356,14 @@ mod tests {
         assert!(content.contains("bind T new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind m run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
         assert!(content.contains("bind M run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
+        assert!(content.contains("bind % split-window -h -c \"#{pane_current_path}\""));
+        assert!(content.contains("bind | split-window -h -c \"#{pane_current_path}\""));
+        assert!(content.contains("bind '\"' split-window -v -c \"#{pane_current_path}\""));
+        assert!(content.contains("bind - split-window -v -c \"#{pane_current_path}\""));
+        assert!(content.contains("bind z resize-pane -Z"));
+        assert!(content.contains("bind Z resize-pane -Z"));
+        assert!(content.contains("bind ! break-pane"));
+        assert!(content.contains("bind [ copy-mode"));
         // Check cyrillic bindings by default
         assert!(content.contains("bind с new-window -n \"+ new\" \"agymux run\""));
         assert!(content.contains("bind С new-window -n \"+ new\" \"agymux run\""));
@@ -368,6 +391,10 @@ mod tests {
         assert!(content.contains("bind Е new-window -n \"term\" \"$SHELL\""));
         assert!(content.contains("bind ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
         assert!(content.contains("bind Ь run-shell \"tmux new-session -d -s main 2>/dev/null; tmux switch-client -t main\""));
+        assert!(content.contains("bind я resize-pane -Z"));
+        assert!(content.contains("bind Я resize-pane -Z"));
+        assert!(content.contains("bind х copy-mode"));
+        assert!(content.contains("bind Х copy-mode"));
     }
 
     #[test]

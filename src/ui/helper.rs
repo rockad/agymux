@@ -142,7 +142,38 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     ));
     text_lines.push(Line::raw(""));
 
-    // Section 3: Modals & Global Controls
+    // Section 3: Window Splits & Panes
+    text_lines.push(Line::from(vec![Span::styled(
+        "▌ WINDOW SPLITS & PANES",
+        Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
+    )]));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space %  /  |",
+        "Split window horizontally",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space \"  /  -",
+        "Split window vertically",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space z  /  Z  /  я  /  Я",
+        "Toggle pane zoom (maximize / restore)",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space [  /  х  /  Х",
+        "Enter scrollback / copy mode",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space !",
+        "Break current pane into new tab",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space x",
+        "Close current pane (or tab if single pane)",
+    ));
+    text_lines.push(Line::raw(""));
+
+    // Section 4: Modals & Global Controls
     text_lines.push(Line::from(vec![Span::styled(
         "▌ MODALS & GLOBAL CONTROLS",
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
@@ -169,7 +200,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     ));
     text_lines.push(Line::raw(""));
 
-    // Section 4: Mouse Controls
+    // Section 5: Mouse Controls
     text_lines.push(Line::from(vec![Span::styled(
         "▌ MOUSE CONTROLS",
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
@@ -189,7 +220,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     ));
     text_lines.push(Line::raw(""));
 
-    // Section 5: Inside Picker
+    // Section 6: Inside Two-Pane Picker
     text_lines.push(Line::from(vec![Span::styled(
         "▌ INSIDE TWO-PANE PICKER",
         Style::default().fg(COLOR_CYAN).add_modifier(Modifier::BOLD),
