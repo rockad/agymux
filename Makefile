@@ -92,6 +92,7 @@ cross-build:
 
 install: build
 	@mkdir -p $(HOME)/.local/bin
+	@rm -f $(HOME)/.local/bin/agymux $(HOME)/.local/bin/ax
 	@cp target/release/agymux $(HOME)/.local/bin/
 	@cp target/release/ax $(HOME)/.local/bin/
 	@echo "Installed agymux and ax to $(HOME)/.local/bin"
