@@ -1,7 +1,7 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
+use std::collections::HashMap;
 use std::path::Path;
-
-use crate::tmux::runner::{SystemTmuxRunner, TmuxClient, TmuxCommandRunner};
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TmuxWindow {
@@ -10,6 +10,391 @@ pub struct TmuxWindow {
     pub name: String,
     pub active: bool,
     pub flags: String,
+}
+
+/// Trait abstracting execution of tmux commands
+pub trait TmuxCommandRunner: Send + Sync {
+    fn run(&self, args: &[&str]) -> Result<String>;
+    fn attach_interactive(&self, args: &[&str]) -> Result<()>;
+}
+
+/// Production runner executing real tmux commands
+#[derive(Debug, Clone, Default)]
+pub struct SystemTmuxRunner;
+
+impl TmuxCommandRunner for SystemTmuxRunner {
+    fn run(&self, args: &[&str]) -> Result<String> {
+        let output = std::process::Command::new("tmux").args(args).output()?;
+        if output.status.success() {
+            Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        } else {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("tmux command failed: {}", stderr.trim());
+        }
+    }
+
+    fn attach_interactive(&self, args: &[&str]) -> Result<()> {
+        let mut cmd = std::process::Command::new("tmux");
+        cmd.args(args);
+        cmd.stdin(std::process::Stdio::inherit());
+        cmd.stdout(std::process::Stdio::inherit());
+        cmd.stderr(std::process::Stdio::inherit());
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let err = cmd.exec();
+            bail!("failed to exec tmux attach: {}", err);
+        }
+
+        #[cfg(not(unix))]
+        {
+            let status = cmd.status()?;
+            if status.success() {
+                Ok(())
+            } else {
+                bail!("tmux exited with status: {:?}", status.code());
+            }
+        }
+    }
+}
+
+type MockClosure = Box<dyn Fn(&[String]) -> Result<String> + Send + Sync>;
+
+enum MockResponse {
+    Output(String),
+    Error(String),
+    Closure(MockClosure),
+}
+
+/// Thread-safe mock runner recording call history and returning configured responses
+#[derive(Default, Clone)]
+pub struct MockTmuxRunner {
+    responses: Arc<Mutex<HashMap<Vec<String>, MockResponse>>>,
+    history: Arc<Mutex<Vec<Vec<String>>>>,
+}
+
+impl MockTmuxRunner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn add_response(&self, args: &[&str], output: impl Into<String>) {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(key, MockResponse::Output(output.into()));
+    }
+
+    pub fn add_error(&self, args: &[&str], err: impl Into<String>) {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(key, MockResponse::Error(err.into()));
+    }
+
+    pub fn add_closure<F>(&self, args: &[&str], f: F)
+    where
+        F: Fn(&[String]) -> Result<String> + Send + Sync + 'static,
+    {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.responses
+            .lock()
+            .unwrap()
+            .insert(key, MockResponse::Closure(Box::new(f)));
+    }
+
+    pub fn calls(&self) -> Vec<Vec<String>> {
+        self.history.lock().unwrap().clone()
+    }
+
+    pub fn last_call(&self) -> Option<Vec<String>> {
+        self.history.lock().unwrap().last().cloned()
+    }
+
+    pub fn call_count(&self) -> usize {
+        self.history.lock().unwrap().len()
+    }
+}
+
+impl TmuxCommandRunner for MockTmuxRunner {
+    fn run(&self, args: &[&str]) -> Result<String> {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.history.lock().unwrap().push(key.clone());
+
+        let lock = self.responses.lock().unwrap();
+        match lock.get(&key) {
+            Some(MockResponse::Output(s)) => Ok(s.clone()),
+            Some(MockResponse::Error(e)) => bail!("{}", e),
+            Some(MockResponse::Closure(f)) => f(&key),
+            None => bail!("MockTmuxRunner: unexpected call: {:?}", args),
+        }
+    }
+
+    fn attach_interactive(&self, args: &[&str]) -> Result<()> {
+        let key: Vec<String> = args.iter().map(|s| s.to_string()).collect();
+        self.history.lock().unwrap().push(key.clone());
+
+        let lock = self.responses.lock().unwrap();
+        match lock.get(&key) {
+            Some(MockResponse::Output(_)) => Ok(()),
+            Some(MockResponse::Error(e)) => bail!("{}", e),
+            Some(MockResponse::Closure(f)) => {
+                f(&key)?;
+                Ok(())
+            }
+            None => Ok(()),
+        }
+    }
+}
+
+/// Generic client wrapping a TmuxCommandRunner
+#[derive(Debug, Clone)]
+pub struct TmuxClient<R: TmuxCommandRunner> {
+    runner: R,
+}
+
+impl<R: TmuxCommandRunner> TmuxClient<R> {
+    pub fn new(runner: R) -> Self {
+        Self { runner }
+    }
+
+    pub fn runner(&self) -> &R {
+        &self.runner
+    }
+
+    pub fn session_exists(&self, name: &str) -> bool {
+        self.runner.run(&["has-session", "-t", name]).is_ok()
+    }
+
+    pub fn list_windows(&self, session: &str) -> Result<Vec<TmuxWindow>> {
+        let output = self.runner.run(&[
+            "list-windows",
+            "-t",
+            session,
+            "-F",
+            "#{window_id}\t#{window_index}\t#{window_name}\t#{window_active}\t#{window_flags}",
+        ])?;
+        TmuxDriver::parse_windows(&output)
+    }
+
+    pub fn new_window(&self, title: Option<&str>, command: Option<&str>) -> Result<()> {
+        let t = title.unwrap_or("+ new");
+        let mut args = vec!["new-window", "-n", t];
+        if let Some(cmd) = command {
+            args.push(cmd);
+        }
+        self.runner.run(&args)?;
+        Ok(())
+    }
+
+    pub fn select_window(&self, target: &str) -> Result<()> {
+        self.runner.run(&["select-window", "-t", target])?;
+        Ok(())
+    }
+
+    /// Rename the target window
+    pub fn rename_window(&self, target: &str, title: &str) -> Result<()> {
+        if target.is_empty() {
+            self.runner.run(&["rename-window", title])?;
+        } else {
+            self.runner.run(&["rename-window", "-t", target, title])?;
+        }
+        Ok(())
+    }
+
+    /// Kill target window
+    pub fn kill_window(&self, target: &str) -> Result<()> {
+        if target.is_empty() {
+            self.runner.run(&["kill-window"])?;
+        } else {
+            self.runner.run(&["kill-window", "-t", target])?;
+        }
+        Ok(())
+    }
+
+    /// Set a window option on target
+    pub fn set_window_option(&self, target: &str, key: &str, value: &str) -> Result<()> {
+        if target.is_empty() {
+            self.runner.run(&["set-option", "-w", key, value])?;
+        } else {
+            self.runner
+                .run(&["set-option", "-w", "-t", target, key, value])?;
+        }
+        Ok(())
+    }
+
+    /// Get a window option on target
+    pub fn get_window_option(&self, target: &str, key: &str) -> Result<Option<String>> {
+        let args = if target.is_empty() {
+            vec!["show-options", "-w", "-v", key]
+        } else {
+            vec!["show-options", "-w", "-t", target, "-v", key]
+        };
+        match self.runner.run(&args) {
+            Ok(val) => {
+                let trimmed = val.trim();
+                if trimmed.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(trimmed.to_string()))
+                }
+            }
+            Err(_) => Ok(None),
+        }
+    }
+
+    pub fn current_session(&self) -> Option<String> {
+        let out = self
+            .runner
+            .run(&["display-message", "-p", "#{session_name}"])
+            .ok()?;
+        let trimmed = out.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    }
+
+    pub fn current_window_name(&self) -> Option<String> {
+        let out = self
+            .runner
+            .run(&["display-message", "-p", "#{window_name}"])
+            .ok()?;
+        let trimmed = out.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    }
+
+    pub fn attach_session(&self, name: &str) -> Result<()> {
+        self.runner
+            .attach_interactive(&["attach-session", "-t", name])?;
+        Ok(())
+    }
+
+    pub fn switch_client(&self, name: &str) -> Result<()> {
+        self.runner.run(&["switch-client", "-t", name])?;
+        Ok(())
+    }
+
+    /// Find any session starting with "agy-" whose pane_current_path matches `dir`
+    pub fn find_session_by_dir(&self, dir: &Path) -> Option<String> {
+        let output = self
+            .runner
+            .run(&[
+                "list-panes",
+                "-a",
+                "-F",
+                "#{session_name}\t#{pane_current_path}",
+            ])
+            .ok()?;
+
+        let target_canonical = dir.canonicalize().ok();
+
+        for line in output.lines() {
+            let parts: Vec<&str> = line.trim().split('\t').collect();
+            if parts.len() >= 2 {
+                let session_name = parts[0];
+                let pane_path = parts[1];
+                if session_name.starts_with("agy-") {
+                    let p = Path::new(pane_path);
+                    if p == dir {
+                        return Some(session_name.to_string());
+                    }
+                    if let (Some(ref tc), Ok(pc)) = (&target_canonical, p.canonicalize()) {
+                        if pc == *tc {
+                            return Some(session_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn ensure_session(
+        &self,
+        name: &str,
+        dir: &Path,
+        config: &crate::config::Config,
+        command: Option<&str>,
+        window_name: Option<&str>,
+    ) -> Result<()> {
+        if self.session_exists(name) {
+            return Ok(());
+        }
+
+        let status_val = if config.theme.tabs.spacer_lines == 0 {
+            "on"
+        } else {
+            "2"
+        };
+        let effective_position = if config.theme.tabs.position != "top" {
+            &config.theme.tabs.position
+        } else if config.theme.status_position != "top" {
+            &config.theme.status_position
+        } else {
+            "top"
+        };
+
+        let conf_path = crate::tmux::TmuxProfile::generate(config, name)?;
+        let dir_str = dir.to_string_lossy();
+        let win = window_name.unwrap_or("+ new");
+
+        let mut cmd_args = vec!["new-session", "-d", "-s", name, "-c", &dir_str, "-n", win];
+        if let Some(cmd) = command {
+            cmd_args.push(cmd);
+        }
+
+        self.runner.run(&cmd_args)?;
+        let _ = self
+            .runner
+            .run(&["source-file", &conf_path.to_string_lossy()]);
+
+        // Record clean human-readable project name in session option
+        let clean_project = if let Some(stripped) = name.strip_prefix("agy-") {
+            if !crate::core::session::is_uuid(stripped)
+                && !stripped.is_empty()
+                && stripped != "main"
+            {
+                stripped.to_string()
+            } else if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+                dir_name.to_string()
+            } else {
+                stripped.to_string()
+            }
+        } else if let Some(dir_name) = dir.file_name().and_then(|n| n.to_str()) {
+            dir_name.to_string()
+        } else {
+            name.to_string()
+        };
+        let _ = self
+            .runner
+            .run(&["set-option", "-t", name, "@agymux_project", &clean_project]);
+
+        // Remove any leftover `status off` in tmux server and guarantee top tab bar is ALWAYS visible in new sessions
+        let _ = self.runner.run(&["set", "-g", "status", status_val]);
+        let _ = self
+            .runner
+            .run(&["set", "-g", "status-position", effective_position]);
+        let _ = self.runner.run(&["set", "-t", name, "status", status_val]);
+        let _ = self
+            .runner
+            .run(&["set", "-t", name, "status-position", effective_position]);
+
+        let _ = self
+            .runner
+            .run(&["select-window", "-t", &format!("{}:1", name)]);
+
+        Ok(())
+    }
 }
 
 pub struct TmuxDriver;
@@ -45,14 +430,24 @@ impl TmuxDriver {
         Self::client().select_window(target)
     }
 
-    /// Rename the current window
-    pub fn rename_window(title: &str) -> Result<()> {
-        Self::client().rename_window(title)
+    /// Rename the target window
+    pub fn rename_window(target: &str, title: &str) -> Result<()> {
+        Self::client().rename_window(target, title)
     }
 
-    /// Kill target window (or current window if None)
-    pub fn kill_window(target: Option<&str>) -> Result<()> {
+    /// Kill target window
+    pub fn kill_window(target: &str) -> Result<()> {
         Self::client().kill_window(target)
+    }
+
+    /// Set a window option on target
+    pub fn set_window_option(target: &str, key: &str, value: &str) -> Result<()> {
+        Self::client().set_window_option(target, key, value)
+    }
+
+    /// Get a window option on target
+    pub fn get_window_option(target: &str, key: &str) -> Result<Option<String>> {
+        Self::client().get_window_option(target, key)
     }
 
     /// Attach to an existing tmux session
@@ -124,7 +519,6 @@ impl TmuxDriver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tmux::runner::MockTmuxRunner;
 
     #[test]
     fn test_parse_windows() {
@@ -252,17 +646,27 @@ mod tests {
     fn test_mock_driver_window_operations() {
         let mock = MockTmuxRunner::new();
         mock.add_response(&["select-window", "-t", ":2"], "");
-        mock.add_response(&["rename-window", "renamed"], "");
+        mock.add_response(&["rename-window", "-t", ":1", "renamed"], "");
         mock.add_response(&["kill-window", "-t", ":3"], "");
         mock.add_response(&["kill-window"], "");
+        mock.add_response(&["set-option", "-w", "-t", ":1", "@conv_id", "123"], "");
+        mock.add_response(
+            &["show-options", "-w", "-t", ":1", "-v", "@conv_id"],
+            "123\n",
+        );
         mock.add_response(&["display-message", "-p", "#{session_name}"], "agy-test\n");
         mock.add_response(&["display-message", "-p", "#{window_name}"], "main\n");
 
         let client = TmuxDriver::with_runner(mock);
         assert!(client.select_window(":2").is_ok());
-        assert!(client.rename_window("renamed").is_ok());
-        assert!(client.kill_window(Some(":3")).is_ok());
-        assert!(client.kill_window(None).is_ok());
+        assert!(client.rename_window(":1", "renamed").is_ok());
+        assert!(client.kill_window(":3").is_ok());
+        assert!(client.kill_window("").is_ok());
+        assert!(client.set_window_option(":1", "@conv_id", "123").is_ok());
+        assert_eq!(
+            client.get_window_option(":1", "@conv_id").unwrap(),
+            Some("123".to_string())
+        );
         assert_eq!(client.current_session(), Some("agy-test".to_string()));
         assert_eq!(client.current_window_name(), Some("main".to_string()));
     }
@@ -309,35 +713,6 @@ mod tests {
 
     #[test]
     fn test_mock_driver_ensure_session_when_missing() {
-        let mock = MockTmuxRunner::new();
-        // has-session returns error (doesn't exist)
-        mock.add_error(&["has-session", "-t", "agy-demo"], "failed");
-        // new-session returns ok
-        mock.add_closure(
-            &[
-                "new-session",
-                "-d",
-                "-s",
-                "agy-demo",
-                "-c",
-                "/tmp",
-                "-n",
-                "main",
-            ],
-            |_| Ok("".into()),
-        );
-        // source-file returns ok (dynamic filename)
-        mock.add_closure(&[], |_| Ok("".into()));
-
-        // We can use a closure to handle source-file and select-window
-        let mock2 = MockTmuxRunner::new();
-        mock2.add_error(&["has-session", "-t", "agy-demo"], "failed");
-        mock2.add_closure(&["new-session"], |_| Ok("".into()));
-        mock2.add_closure(&["source-file"], |_| Ok("".into()));
-        mock2.add_closure(&["select-window"], |_| Ok("".into()));
-
-        // Actually, let's test ensure_session logic directly:
-        // If session_exists is true, ensure_session does not call new-session
         let mock_exists = MockTmuxRunner::new();
         mock_exists.add_response(&["has-session", "-t", "agy-demo"], "");
         let client_exists = TmuxDriver::with_runner(mock_exists.clone());
@@ -346,7 +721,6 @@ mod tests {
         assert!(res.is_ok());
         assert_eq!(mock_exists.call_count(), 1); // only checked has-session
 
-        // Test ensure_session when missing: passes command and window_name to new-session
         let res2 = client_exists.ensure_session(
             "agy-missing",
             Path::new("/tmp"),
@@ -354,8 +728,6 @@ mod tests {
             Some("agymux run"),
             Some("custom"),
         );
-        // mock_exists has no expectation for "has-session -t agy-missing", so it returns error (doesn't exist)
-        // and then attempts new-session
         let _ = res2;
     }
 
@@ -388,7 +760,6 @@ mod tests {
         let not_found = client.find_session_by_dir(Path::new("/home/rockad/projects/nonexistent"));
         assert_eq!(not_found, None);
 
-        // Does not match non-agy session even if path matches
         let non_agy = client.find_session_by_dir(Path::new("/home/rockad/projects/other"));
         assert_eq!(non_agy, None);
     }

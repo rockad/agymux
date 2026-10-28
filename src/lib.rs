@@ -12,8 +12,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
-    thread,
-    time::Duration,
 };
 
 /// Main CLI entry point and dispatcher
@@ -108,24 +106,12 @@ pub fn run() -> Result<()> {
                     "break" | "break-pane" => ui::palette::PaletteAction::BreakPane,
                     "copy" | "copy-mode" | "scroll" => ui::palette::PaletteAction::CopyMode,
                     "close-pane" | "kill-pane" => ui::palette::PaletteAction::ClosePane,
-                    "layout" | "rail" | "sidebar" => {
-                        run_layout(None)?;
-                        return Ok(());
-                    }
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;
             } else {
                 ui::run_palette(Some(project))?;
             }
-        }
-
-        Some(Commands::Layout { mode }) => {
-            run_layout(mode.as_deref())?;
-        }
-
-        Some(Commands::Rail) => {
-            ui::run_rail()?;
         }
 
         Some(Commands::Helper) => {
@@ -214,20 +200,8 @@ pub fn run() -> Result<()> {
             run_ls()?;
         }
 
-        Some(Commands::Watch {
-            window,
-            project,
-            start_time,
-            exclude_id,
-            conversation_id,
-        }) => {
-            run_watcher(
-                &window,
-                &project,
-                &start_time,
-                exclude_id.as_deref(),
-                conversation_id.as_deref(),
-            )?;
+        Some(Commands::CloseWindow { target }) => {
+            run_close_window(target.as_deref())?;
         }
 
         Some(Commands::Hook) => {
@@ -642,13 +616,10 @@ pub fn heal_unbound_windows(project: &str) -> Result<()> {
                 Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
             }) {
                 if !bound_ids.contains(&cid) {
-                    let _ = Command::new("tmux")
-                        .args(["set-option", "-w", "-t", win_id, "@conversation_id", &cid])
-                        .status();
+                    let _ = tmux::TmuxDriver::set_window_option(win_id, "@conversation_id", &cid);
                     let clean = sanitize_title(&title);
-                    let _ = Command::new("tmux")
-                        .args(["rename-window", "-t", win_id, &clean])
-                        .status();
+                    let _ = tmux::TmuxDriver::rename_window(win_id, &clean);
+                    let _ = crate::core::TabRegistry::bind_static(win_id, &cid);
                 }
             }
         }
@@ -694,12 +665,30 @@ fn run_bind(project: &str, dir: &Path, conversation_id: Option<String>) -> Resul
     let clean = sanitize_title(title_str);
 
     if std::env::var("TMUX").is_ok() {
-        let _ = Command::new("tmux")
-            .args(["set-option", "-w", "@conversation_id", &target_cid])
-            .status();
-        let _ = Command::new("tmux")
-            .args(["rename-window", &clean])
-            .status();
+        let current_win_id = if let Ok(pane_id) = std::env::var("TMUX_PANE") {
+            Command::new("tmux")
+                .args(["display-message", "-p", "-t", &pane_id, "#{window_id}"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            Command::new("tmux")
+                .args(["display-message", "-p", "#{window_id}"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        };
+
+        let target_win = current_win_id.as_deref().unwrap_or("");
+        let _ = tmux::TmuxDriver::set_window_option(target_win, "@conversation_id", &target_cid);
+        let _ = tmux::TmuxDriver::rename_window(target_win, &clean);
+        if let Some(ref win_id) = current_win_id {
+            let _ = crate::core::TabRegistry::bind_static(win_id, &target_cid);
+        }
         let toast = format!("Bound tab to: {} ({})", clean, target_cid);
         let _ = Command::new("tmux")
             .args(["display-message", &toast])
@@ -1048,32 +1037,37 @@ fn run_runner(
 
     // 1. Instant window naming and capture window id
     let target_window = if in_tmux {
-        Command::new("tmux")
-            .args(["display-message", "-p", "#{window_id}"])
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim().to_string())
+        if let Ok(pane_id) = std::env::var("TMUX_PANE") {
+            Command::new("tmux")
+                .args(["display-message", "-p", "-t", &pane_id, "#{window_id}"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        } else {
+            Command::new("tmux")
+                .args(["display-message", "-p", "#{window_id}"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+        }
     } else {
         None
     };
 
     if in_tmux {
         let rc_val = if effective_remote_control { "1" } else { "0" };
-        if let Some(ref win) = target_window {
-            let _ = Command::new("tmux")
-                .args(["set-option", "-w", "-t", win, "@remote_control", rc_val])
-                .status();
-        } else {
-            let _ = Command::new("tmux")
-                .args(["set-option", "-w", "@remote_control", rc_val])
-                .status();
-        }
+        let win_target = target_window.as_deref().unwrap_or("");
+        let _ = tmux::TmuxDriver::set_window_option(win_target, "@remote_control", rc_val);
 
         if let Some(ref cid) = conv_id {
-            let _ = Command::new("tmux")
-                .args(["set-option", "-w", "@conversation_id", cid])
-                .status();
+            let _ = tmux::TmuxDriver::set_window_option(win_target, "@conversation_id", cid);
+            if let Some(ref win) = target_window {
+                let _ = crate::core::TabRegistry::bind_static(win, cid);
+            }
 
             let db = db_path();
             if db.exists() {
@@ -1083,15 +1077,17 @@ fn run_runner(
                         .ok();
                     if let Some(mut s) = stmt {
                         if let Ok(title) = s.query_row([cid], |r| r.get::<_, String>(0)) {
-                            let _ = tmux::TmuxDriver::rename_window(&sanitize_title(&title));
+                            let clean_title = sanitize_title(&title);
+                            let _ = tmux::TmuxDriver::rename_window(win_target, &clean_title);
                         }
                     }
                 }
             }
         } else if let Some(ref prompt) = initial_prompt {
-            let _ = tmux::TmuxDriver::rename_window(&sanitize_title(prompt));
+            let clean_prompt = sanitize_title(prompt);
+            let _ = tmux::TmuxDriver::rename_window(win_target, &clean_prompt);
         } else {
-            let _ = tmux::TmuxDriver::rename_window("+ new");
+            let _ = tmux::TmuxDriver::rename_window(win_target, "+ new");
         }
     }
 
@@ -1128,248 +1124,6 @@ fn run_runner(
         };
         std::process::exit(code);
     }
-}
-
-/// Detached background watcher that polls SQLite for a newly created conversation, renames the window,
-/// and continuously monitors for external turn / step count / mtime updates.
-fn run_watcher(
-    target_window: &str,
-    project: &str,
-    start_time: &str,
-    exclude_id: Option<&str>,
-    conversation_id: Option<&str>,
-) -> Result<()> {
-    let db = db_path();
-    let proj = project.to_string();
-    let pattern = format!("%{}%", proj);
-
-    let mut active_cid: Option<String> = conversation_id.map(|s| s.to_string());
-
-    // Phase 1: If no conversation ID was provided, poll for the newly created conversation
-    if active_cid.is_none() {
-        for _ in 0..300 {
-            thread::sleep(Duration::from_millis(500));
-
-            // Verify window still exists
-            let window_alive = Command::new("tmux")
-                .args(["display-message", "-p", "-t", target_window, "#{window_id}"])
-                .output()
-                .map(|o| o.status.success() && !o.stdout.is_empty())
-                .unwrap_or(false);
-            if !window_alive {
-                return Ok(());
-            }
-
-            if !db.exists() {
-                continue;
-            }
-
-            if let Ok(conn) = rusqlite::Connection::open(&db) {
-                let hygiene = crate::core::session::session_hygiene_conditions(
-                    &conn,
-                    "conversation_summaries",
-                );
-                let hygiene_and = if hygiene.is_empty() {
-                    String::new()
-                } else {
-                    format!(" AND {}", hygiene.join(" AND "))
-                };
-
-                // Exclude any conversation ID already bound to a window in tmux
-                let mut bound_ids = get_bound_conversation_ids(None);
-                if let Some(ex) = exclude_id {
-                    bound_ids.insert(ex.to_string());
-                }
-
-                let bound_clause = if bound_ids.is_empty() {
-                    String::new()
-                } else {
-                    let placeholders: Vec<String> = (0..bound_ids.len())
-                        .map(|i| format!("?{}", i + 4))
-                        .collect();
-                    format!(" AND conversation_id NOT IN ({})", placeholders.join(","))
-                };
-
-                let sql = format!("
-                    SELECT conversation_id, title 
-                    FROM conversation_summaries 
-                    WHERE (workspace_uris LIKE ?1 OR project_id = ?2)
-                      AND (last_modified_time >= ?3 OR substr(last_modified_time, 1, 19) >= substr(?3, 1, 19))
-                      AND title IS NOT NULL AND title != ''{}{bound_clause}
-                    ORDER BY last_modified_time DESC 
-                    LIMIT 1;
-                ", hygiene_and);
-
-                if let Ok(mut stmt) = conn.prepare(&sql) {
-                    let mut params: Vec<rusqlite::types::Value> = vec![
-                        pattern.clone().into(),
-                        proj.clone().into(),
-                        start_time.to_string().into(),
-                    ];
-                    for id in bound_ids {
-                        params.push(id.into());
-                    }
-
-                    if let Ok((cid, title)) = stmt
-                        .query_row(rusqlite::params_from_iter(params.iter()), |r| {
-                            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-                        })
-                    {
-                        let _ = Command::new("tmux")
-                            .args([
-                                "set-option",
-                                "-w",
-                                "-t",
-                                target_window,
-                                "@conversation_id",
-                                &cid,
-                            ])
-                            .status();
-                        let clean = sanitize_title(&title);
-                        let _ = Command::new("tmux")
-                            .args(["rename-window", "-t", target_window, &clean])
-                            .status();
-                        active_cid = Some(cid);
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    // Phase 2: External sync loop for active conversation (monitoring step count, mtime, and title)
-    if let Some(cid) = active_cid {
-        let mut last_steps: Option<i64> = None;
-        let mut last_mtime: Option<i64> = None;
-        let mut last_title: Option<String> = None;
-
-        // Baseline initialization
-        if db.exists() {
-            if let Ok(conn) = rusqlite::Connection::open(&db) {
-                let _ = conn.query_row(
-                    "SELECT title, step_count, strftime('%s', last_modified_time) FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
-                    [&cid],
-                    |r| {
-                        last_title = r.get::<_, Option<String>>(0).ok().flatten();
-                        last_steps = r.get::<_, Option<i64>>(1).ok().flatten();
-                        let epoch_str: Option<String> = r.get(2).ok();
-                        if let Some(ep) = epoch_str {
-                            last_mtime = ep.parse::<i64>().ok();
-                        }
-                        Ok(())
-                    },
-                );
-            }
-        }
-
-        if let Some(steps) = last_steps {
-            let _ = Command::new("tmux")
-                .args([
-                    "set-option",
-                    "-w",
-                    "-t",
-                    target_window,
-                    "@step_count",
-                    &steps.to_string(),
-                ])
-                .status();
-        }
-
-        // Poll for external updates while window exists (every 1s, continuously until window closes)
-        loop {
-            thread::sleep(Duration::from_secs(1));
-
-            // Verify window still exists in tmux
-            let window_alive = Command::new("tmux")
-                .args(["display-message", "-p", "-t", target_window, "#{window_id}"])
-                .output()
-                .map(|o| o.status.success() && !o.stdout.is_empty())
-                .unwrap_or(false);
-            if !window_alive {
-                break;
-            }
-
-            if !db.exists() {
-                continue;
-            }
-
-            if let Ok(conn) = rusqlite::Connection::open(&db) {
-                let row_res = conn.query_row(
-                    "SELECT title, step_count, strftime('%s', last_modified_time) FROM conversation_summaries WHERE conversation_id = ?1 LIMIT 1",
-                    [&cid],
-                    |r| {
-                        let t: Option<String> = r.get(0).ok();
-                        let s: Option<i64> = r.get(1).ok();
-                        let ep: Option<String> = r.get(2).ok();
-                        Ok((t, s, ep.and_then(|e| e.parse::<i64>().ok())))
-                    },
-                );
-
-                if let Ok((curr_title, curr_steps, curr_mtime)) = row_res {
-                    let mut changed = false;
-
-                    if let Some(steps) = curr_steps {
-                        if last_steps.is_none_or(|prev| steps > prev) {
-                            last_steps = Some(steps);
-                            changed = true;
-                            let _ = Command::new("tmux")
-                                .args([
-                                    "set-option",
-                                    "-w",
-                                    "-t",
-                                    target_window,
-                                    "@step_count",
-                                    &steps.to_string(),
-                                ])
-                                .status();
-                        }
-                    }
-
-                    if let Some(mtime) = curr_mtime {
-                        if last_mtime.is_none_or(|prev| mtime > prev) {
-                            last_mtime = Some(mtime);
-                            changed = true;
-                        }
-                    }
-
-                    // Direct file mtime check
-                    let (_, file_mtime) =
-                        crate::core::session::get_conversation_mtime_and_steps(None, &cid);
-                    if let Some(fmtime) = file_mtime {
-                        if last_mtime.is_some_and(|prev| fmtime > prev) {
-                            last_mtime = Some(fmtime);
-                            changed = true;
-                        }
-                    }
-
-                    if changed {
-                        let _ = Command::new("tmux")
-                            .args([
-                                "set-option",
-                                "-w",
-                                "-t",
-                                target_window,
-                                "@external_sync",
-                                "1",
-                            ])
-                            .status();
-                    }
-
-                    if let Some(ref t) = curr_title {
-                        if !t.is_empty() && last_title.as_ref() != Some(t) {
-                            let clean = sanitize_title(t);
-                            let _ = Command::new("tmux")
-                                .args(["rename-window", "-t", target_window, &clean])
-                                .status();
-                            last_title = Some(t.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
 }
 
 /// Print formatted transcript preview to stdout
@@ -1475,64 +1229,6 @@ fn run_ls() -> Result<()> {
     Ok(())
 }
 
-/// Toggle or set cockpit layout mode (deprecated in favor of top tab bar)
-pub fn run_layout(_mode: Option<&str>) -> Result<()> {
-    if std::env::var("TMUX").is_err() {
-        println!("agymux: Vertical sidebar rail is deprecated in favor of the top tab bar.");
-        return Ok(());
-    }
-
-    let config = Config::load().unwrap_or_default();
-    let status_val = if config.theme.tabs.spacer_lines == 0 {
-        "on"
-    } else {
-        "2"
-    };
-
-    // Kill any lingering rail pane if present
-    if let Ok(output) = Command::new("tmux")
-        .args(["list-panes", "-F", "#{pane_id}:#{pane_title}:#{@is_rail}"])
-        .output()
-    {
-        let raw = String::from_utf8_lossy(&output.stdout);
-        for line in raw.lines() {
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 2 {
-                let pid = parts[0];
-                let title = parts[1];
-                let is_rail = parts.get(2).copied().unwrap_or("");
-                if title == "agymux-rail" || is_rail == "1" {
-                    let _ = Command::new("tmux").args(["kill-pane", "-t", pid]).status();
-                }
-            }
-        }
-    }
-
-    // Guarantee horizontal top tab bar is ALWAYS enabled; NEVER set status off globally!
-    let _ = Command::new("tmux")
-        .args(["set", "-g", "status", status_val])
-        .status();
-    let _ = Command::new("tmux")
-        .args(["set", "-g", "status-position", "top"])
-        .status();
-    let _ = Command::new("tmux")
-        .args(["set", "status", status_val])
-        .status();
-    let _ = Command::new("tmux")
-        .args(["set", "status-position", "top"])
-        .status();
-
-    let _ = Command::new("tmux")
-        .args([
-            "display-message",
-            "agymux: Vertical rail is deprecated. Top tab bar is always enabled (Ctrl+Space b to switch, Ctrl+Space h for cheatsheet).",
-        ])
-        .status();
-
-    println!("agymux: Vertical sidebar rail is deprecated in favor of top tab bar. Top tabs are enabled.");
-    Ok(())
-}
-
 /// Lifecycle hook invoked by Antigravity on turn stop to synchronize tab titles
 pub fn run_hook() -> Result<()> {
     use std::io::Read;
@@ -1564,78 +1260,86 @@ pub fn run_hook() -> Result<()> {
                         if !t.trim().is_empty() {
                             let clean = sanitize_title(&t);
 
-                            // Strategy 1: Check TMUX_PANE for exact pane -> window identification
-                            if let Ok(pane_id) = std::env::var("TMUX_PANE") {
-                                if let Ok(out) = Command::new("tmux")
-                                    .args([
-                                        "display-message",
-                                        "-p",
-                                        "-t",
-                                        &pane_id,
-                                        "#{window_id}:#{window_name}:#{@conversation_id}",
-                                    ])
+                            // Strategy 1: Check TabRegistry cross-reference map
+                            let mut resolved_win: Option<String> = None;
+                            if let Some(reg_win) =
+                                crate::core::TabRegistry::get_window_for_conv_static(cid)
+                            {
+                                // Verify this window actually exists in tmux
+                                let exists = Command::new("tmux")
+                                    .args(["display-message", "-p", "-t", &reg_win, "#{window_id}"])
                                     .output()
-                                {
-                                    if out.status.success() {
-                                        let stdout = String::from_utf8_lossy(&out.stdout);
-                                        let parts: Vec<&str> =
-                                            stdout.trim().splitn(3, ':').collect();
-                                        if !parts.is_empty() && !parts[0].is_empty() {
-                                            let win_id = parts[0];
-                                            let win_name = parts.get(1).copied().unwrap_or("");
-                                            let win_cid = parts.get(2).copied().unwrap_or("");
+                                    .ok()
+                                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                                    .map(|s| s.trim() == reg_win)
+                                    .unwrap_or(false);
+                                if exists {
+                                    resolved_win = Some(reg_win);
+                                } else {
+                                    let _ =
+                                        crate::core::TabRegistry::unbind_window_static(&reg_win);
+                                }
+                            }
 
-                                            if win_cid != cid {
-                                                let _ = Command::new("tmux")
-                                                    .args([
-                                                        "set-option",
-                                                        "-w",
-                                                        "-t",
-                                                        win_id,
-                                                        "@conversation_id",
-                                                        cid,
-                                                    ])
-                                                    .status();
+                            // Strategy 2: If not found in registry, check TMUX_PANE
+                            if resolved_win.is_none() {
+                                if let Ok(pane_id) = std::env::var("TMUX_PANE") {
+                                    if let Ok(out) = Command::new("tmux")
+                                        .args([
+                                            "display-message",
+                                            "-p",
+                                            "-t",
+                                            &pane_id,
+                                            "#{window_id}",
+                                        ])
+                                        .output()
+                                    {
+                                        if out.status.success() {
+                                            let stdout = String::from_utf8_lossy(&out.stdout);
+                                            let w_id = stdout.trim().to_string();
+                                            if !w_id.is_empty() {
+                                                resolved_win = Some(w_id);
                                             }
-                                            if win_name != clean {
-                                                let _ = Command::new("tmux")
-                                                    .args(["rename-window", "-t", win_id, &clean])
-                                                    .status();
-                                            }
-                                            println!("{{}}");
-                                            return Ok(());
                                         }
                                     }
                                 }
                             }
 
-                            // Strategy 2: If TMUX_PANE is absent, check for exact window matching win_cid == cid
-                            if let Ok(out) = Command::new("tmux")
-                                .args([
-                                    "list-windows",
-                                    "-F",
-                                    "#{window_id}:#{@conversation_id}:#{window_name}",
-                                ])
-                                .output()
-                            {
-                                let stdout = String::from_utf8_lossy(&out.stdout);
-                                for line in stdout.lines() {
-                                    let parts: Vec<&str> = line.splitn(3, ':').collect();
-                                    if parts.len() >= 3 {
-                                        let win_id = parts[0];
-                                        let win_cid = parts[1];
-                                        let win_name = parts[2];
-
-                                        if win_cid == cid {
-                                            if win_name != clean {
-                                                let _ = Command::new("tmux")
-                                                    .args(["rename-window", "-t", win_id, &clean])
-                                                    .status();
+                            // Strategy 3: Check list-windows for matching @conversation_id
+                            if resolved_win.is_none() {
+                                if let Ok(out) = Command::new("tmux")
+                                    .args([
+                                        "list-windows",
+                                        "-F",
+                                        "#{window_id}:#{@conversation_id}",
+                                    ])
+                                    .output()
+                                {
+                                    let stdout = String::from_utf8_lossy(&out.stdout);
+                                    for line in stdout.lines() {
+                                        let parts: Vec<&str> = line.splitn(2, ':').collect();
+                                        if parts.len() >= 2 {
+                                            let win_id = parts[0];
+                                            let win_cid = parts[1];
+                                            if win_cid == cid {
+                                                resolved_win = Some(win_id.to_string());
+                                                break;
                                             }
-                                            break;
                                         }
                                     }
                                 }
+                            }
+
+                            if let Some(target_win) = resolved_win {
+                                let _ = crate::core::TabRegistry::bind_static(&target_win, cid);
+                                let _ = tmux::TmuxDriver::set_window_option(
+                                    &target_win,
+                                    "@conversation_id",
+                                    cid,
+                                );
+                                let _ = tmux::TmuxDriver::rename_window(&target_win, &clean);
+                                println!("{{}}");
+                                return Ok(());
                             }
                         }
                     }
@@ -1645,6 +1349,70 @@ pub fn run_hook() -> Result<()> {
     }
 
     println!("{{}}");
+    Ok(())
+}
+
+/// Safely close a window/tab by id or status range, unbinding from tab registry
+pub fn run_close_window(target: Option<&str>) -> Result<()> {
+    let win_id = if let Some(t) = target {
+        let stripped = t.strip_prefix("close:").unwrap_or(t).trim();
+        if stripped.is_empty() || stripped == "close" {
+            Command::new("tmux")
+                .args(["display-message", "-p", "#{window_id}"])
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+        } else {
+            Some(stripped.to_string())
+        }
+    } else {
+        Command::new("tmux")
+            .args(["display-message", "-p", "#{window_id}"])
+            .output()
+            .ok()
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+    };
+
+    let Some(target_win) = win_id else {
+        return Ok(());
+    };
+
+    if target_win.is_empty() {
+        return Ok(());
+    }
+
+    // Determine total windows in the session containing target_win
+    let total_windows = Command::new("tmux")
+        .args([
+            "display-message",
+            "-p",
+            "-t",
+            &target_win,
+            "#{session_windows}",
+        ])
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|s| s.trim().parse::<usize>().ok())
+        .unwrap_or(1);
+
+    if total_windows > 1 {
+        let _ = tmux::TmuxDriver::kill_window(&target_win);
+        let _ = crate::core::TabRegistry::unbind_window_static(&target_win);
+    } else {
+        let _ = Command::new("tmux")
+            .args([
+                "confirm-before",
+                "-p",
+                "Close final tab? (y/n)",
+                &format!("kill-window -t {}", target_win),
+            ])
+            .status();
+        let _ = crate::core::TabRegistry::unbind_window_static(&target_win);
+    }
+
     Ok(())
 }
 

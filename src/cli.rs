@@ -97,14 +97,12 @@ pub enum Commands {
         conversation_id: Option<String>,
     },
 
-    /// Toggle or set cockpit layout mode (horizontal tabs vs IDE vertical sidebar rail)
-    Layout {
-        /// Layout mode: "horizontal" or "vertical" (defaults to toggle)
-        mode: Option<String>,
+    /// Safely close a window/tab by id or status range, unbinding from tab registry
+    #[command(alias = "close-tab")]
+    CloseWindow {
+        /// Target window id or status range (e.g. "@1" or "close:@1")
+        target: Option<String>,
     },
-
-    /// Render interactive OpenCode-style vertical session rail sidebar
-    Rail,
 
     /// Internal lifecycle hook invoked by Antigravity on turn stop
     #[command(hide = true)]
@@ -112,21 +110,6 @@ pub enum Commands {
 
     /// Install or update agymux lifecycle hook in Antigravity configuration
     Install,
-
-    /// Internal background watcher for renaming windows
-    #[command(hide = true)]
-    Watch {
-        #[arg(long)]
-        window: String,
-        #[arg(long)]
-        project: String,
-        #[arg(long)]
-        start_time: String,
-        #[arg(long)]
-        exclude_id: Option<String>,
-        #[arg(long)]
-        conversation_id: Option<String>,
-    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -274,61 +257,6 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_watch_subcommand() {
-        let cli = Cli::try_parse_from([
-            "agymux",
-            "watch",
-            "--window",
-            "@1",
-            "--project",
-            "my-project",
-            "--start-time",
-            "2026-10-09 12:00:00",
-            "--exclude-id",
-            "last-uuid",
-        ])
-        .expect("parsing succeeds");
-        match cli.command {
-            Some(Commands::Watch {
-                window,
-                project,
-                start_time,
-                exclude_id,
-                conversation_id,
-            }) => {
-                assert_eq!(window, "@1");
-                assert_eq!(project, "my-project");
-                assert_eq!(start_time, "2026-10-09 12:00:00");
-                assert_eq!(exclude_id.as_deref(), Some("last-uuid"));
-                assert_eq!(conversation_id, None);
-            }
-            other => panic!("expected Watch, got {:?}", other),
-        }
-
-        let cli_with_cid = Cli::try_parse_from([
-            "agymux",
-            "watch",
-            "--window",
-            "@2",
-            "--project",
-            "my-project",
-            "--start-time",
-            "2026-10-09 12:00:00",
-            "--conversation-id",
-            "target-uuid",
-        ])
-        .expect("parsing succeeds");
-        match cli_with_cid.command {
-            Some(Commands::Watch {
-                conversation_id, ..
-            }) => {
-                assert_eq!(conversation_id.as_deref(), Some("target-uuid"));
-            }
-            other => panic!("expected Watch, got {:?}", other),
-        }
-    }
-
-    #[test]
     fn test_cli_bind_subcommand() {
         let cli_no_id = Cli::try_parse_from(["agymux", "bind"]).expect("parsing succeeds");
         match cli_no_id.command {
@@ -364,37 +292,31 @@ mod tests {
     }
 
     #[test]
-    fn test_cli_layout_and_rail_subcommands() {
-        let cli_layout = Cli::try_parse_from(["agymux", "layout"]).expect("parsing succeeds");
-        match cli_layout.command {
-            Some(Commands::Layout { mode }) => {
-                assert_eq!(mode, None);
-            }
-            other => panic!("expected Layout, got {:?}", other),
-        }
-
-        let cli_layout_vert =
-            Cli::try_parse_from(["agymux", "layout", "vertical"]).expect("parsing succeeds");
-        match cli_layout_vert.command {
-            Some(Commands::Layout { mode }) => {
-                assert_eq!(mode.as_deref(), Some("vertical"));
-            }
-            other => panic!("expected Layout, got {:?}", other),
-        }
-
-        let cli_rail = Cli::try_parse_from(["agymux", "rail"]).expect("parsing succeeds");
-        match cli_rail.command {
-            Some(Commands::Rail) => {}
-            other => panic!("expected Rail, got {:?}", other),
-        }
-    }
-
-    #[test]
     fn test_cli_hook_and_install_subcommands() {
         let cli_hook = Cli::try_parse_from(["agymux", "hook"]).expect("parsing succeeds");
         assert!(matches!(cli_hook.command, Some(Commands::Hook)));
 
         let cli_install = Cli::try_parse_from(["agymux", "install"]).expect("parsing succeeds");
         assert!(matches!(cli_install.command, Some(Commands::Install)));
+    }
+
+    #[test]
+    fn test_cli_close_window_subcommand() {
+        let cli =
+            Cli::try_parse_from(["agymux", "close-window", "close:@1"]).expect("parsing succeeds");
+        match cli.command {
+            Some(Commands::CloseWindow { target }) => {
+                assert_eq!(target.as_deref(), Some("close:@1"));
+            }
+            other => panic!("expected CloseWindow, got {:?}", other),
+        }
+
+        let cli_alias = Cli::try_parse_from(["agymux", "close-tab"]).expect("parsing succeeds");
+        match cli_alias.command {
+            Some(Commands::CloseWindow { target }) => {
+                assert_eq!(target, None);
+            }
+            other => panic!("expected CloseWindow, got {:?}", other),
+        }
     }
 }
