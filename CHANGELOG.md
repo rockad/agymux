@@ -1,3 +1,8 @@
+## [0.4.0] - 2026-10-28
+
+### 🚀 Features
+
+- *(palette)* Add window splits, tmux controls, and clean aligned layout
 ## [0.3.0] - 2026-10-21
 
 ### 🚀 Features
@@ -17,6 +22,7 @@
 - *(watcher)* Prevent duplicate tab naming by excluding all bound conversation IDs and expand title limit
 - *(picker)* Ensure outside-tmux selections attach to agymux tmux session cleanly
 - *(runner)* Pass --conversation instead of -c <id> when resuming session
+- *(palette)* Fix clippy ascii comparison lint and rustfmt formatting
 
 ### 🎨 Styling
 
@@ -26,6 +32,10 @@
 
 - *(session)* Add integration test suite for subagent and abandoned session filtering
 - *(sync)* Add cross surface sync integration tests
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bump version to 0.3.0
 ## [0.2.1] - 2026-10-13
 
 ### ⚙️ Miscellaneous Tasks
