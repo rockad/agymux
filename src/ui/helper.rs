@@ -75,7 +75,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     // Title line
     text_lines.push(Line::from(vec![Span::styled(
         format!(
-            "agymux v{} — Keyboard Shortcuts & Commands",
+            "ax v{} — Keyboard Shortcuts & Commands",
             env!("CARGO_PKG_VERSION")
         ),
         Style::default()
@@ -98,6 +98,14 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Cycle to previous / next tab",
     ));
     text_lines.push(shortcut_line(
+        "Ctrl+Shift+Left / Right",
+        "Move tab left / right",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space <  /  >  /  Б  /  Ю",
+        "Move tab left / right",
+    ));
+    text_lines.push(shortcut_line(
         "Ctrl+Space s  /  S  /  ы  /  Ы",
         "Two-pane tab & conversation switcher",
     ));
@@ -110,7 +118,11 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
     )]));
     text_lines.push(shortcut_line(
         "Ctrl+Space c  /  C  /  с  /  С",
-        "New conversation tab in current workspace",
+        "New Claude tab (claude)",
+    ));
+    text_lines.push(shortcut_line(
+        "Ctrl+Space n  /  N  /  т  /  Т",
+        "New Antigravity tab (agy)",
     ));
     text_lines.push(shortcut_line(
         "Ctrl+Space w  /  ц",
@@ -218,6 +230,7 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Click Tab Body",
         "Switch client view to clicked tab",
     ));
+    text_lines.push(shortcut_line("Mouse Drag", "Drag tab to reorder"));
     text_lines.push(Line::raw(""));
 
     // Section 6: Inside Two-Pane Picker

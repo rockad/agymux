@@ -36,7 +36,7 @@ if [ "$CURRENT_VERSION" = "$NEXT_VERSION" ]; then
     exit 0
 fi
 
-echo "Bumping agymux release: v$CURRENT_VERSION -> v$NEXT_VERSION"
+echo "Bumping ax release: v$CURRENT_VERSION -> v$NEXT_VERSION"
 
 # 1. Update Cargo.toml
 sed -i "s/^version = \"$CURRENT_VERSION\"/version = \"$NEXT_VERSION\"/" Cargo.toml

@@ -1,3 +1,3 @@
 fn main() -> anyhow::Result<()> {
-    agymux::run()
+    ax::run()
 }

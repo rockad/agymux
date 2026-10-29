@@ -119,7 +119,7 @@ pub struct TabsConfig {
 }
 
 fn default_tab_position() -> String {
-    "bottom".to_string()
+    "top".to_string()
 }
 fn default_tab_layout() -> String {
     "horizontal".to_string()
@@ -128,7 +128,7 @@ fn default_sidebar_position() -> String {
     "left".to_string()
 }
 fn default_spacer_lines() -> usize {
-    1
+    0
 }
 fn default_tab_alignment() -> String {
     "left".to_string()
@@ -195,7 +195,7 @@ fn default_false() -> bool {
     false
 }
 fn default_status_position() -> String {
-    "bottom".to_string()
+    "top".to_string()
 }
 fn default_prefix() -> String {
     "C-Space".to_string()
@@ -240,16 +240,44 @@ impl Default for KeybindingsConfig {
 }
 
 impl Config {
-    /// Return the canonical config directory: $XDG_CONFIG_HOME/agymux or ~/.config/agymux
+    /// Return the canonical config directory: $XDG_CONFIG_HOME/ax or ~/.config/ax (with legacy agymux fallback)
     pub fn config_dir() -> PathBuf {
+        let base = dirs::config_dir()
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"));
+        let ax_dir = base.join("ax");
+        let agymux_dir = base.join("agymux");
+        if ax_dir.exists() {
+            ax_dir
+        } else if agymux_dir.exists() {
+            agymux_dir
+        } else {
+            ax_dir
+        }
+    }
+
+    /// Return the canonical primary config directory ($XDG_CONFIG_HOME/ax or ~/.config/ax)
+    pub fn primary_config_dir() -> PathBuf {
         dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("~/.config"))
-            .join("agymux")
+            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
+            .join("ax")
     }
 
     /// Return the canonical config file path
     pub fn config_path() -> PathBuf {
-        Self::config_dir().join("config.toml")
+        let primary = Self::primary_config_dir().join("config.toml");
+        if primary.exists() {
+            primary
+        } else {
+            let legacy = dirs::config_dir()
+                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".config"))
+                .join("agymux")
+                .join("config.toml");
+            if legacy.exists() {
+                legacy
+            } else {
+                primary
+            }
+        }
     }
 
     /// Load configuration from file, falling back to defaults if not found
@@ -271,7 +299,7 @@ impl Config {
 
     /// Save configuration to file, creating parent directories if needed
     pub fn save(&self) -> Result<()> {
-        let path = Self::config_path();
+        let path = Self::primary_config_dir().join("config.toml");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("Failed to create config directory at {:?}", parent))?;
@@ -285,7 +313,7 @@ impl Config {
 
     /// Save default configuration if none exists
     pub fn save_default_if_missing() -> Result<()> {
-        let path = Self::config_path();
+        let path = Self::primary_config_dir().join("config.toml");
         if !path.exists() {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent)?;
@@ -330,7 +358,7 @@ mod tests {
         assert!(config.general.single_remote_control_instance);
         assert_eq!(config.theme.preset, "default");
         assert!(!config.theme.rounded_pills);
-        assert_eq!(config.theme.status_position, "bottom");
+        assert_eq!(config.theme.status_position, "top");
         assert_eq!(config.keybindings.prefix, "C-Space");
         assert!(config.keybindings.bilingual_cyrillic);
         assert!(!config.tmux.isolated_socket);
@@ -499,10 +527,10 @@ default_effort = "low"
     #[test]
     fn test_tabs_config_defaults() {
         let tabs = TabsConfig::default();
-        assert_eq!(tabs.position, "bottom");
+        assert_eq!(tabs.position, "top");
         assert_eq!(tabs.layout, "horizontal");
         assert_eq!(tabs.sidebar_position, "left");
-        assert_eq!(tabs.spacer_lines, 1);
+        assert_eq!(tabs.spacer_lines, 0);
         assert_eq!(tabs.alignment, "left");
         assert!(tabs.show_close_button);
         assert_eq!(tabs.min_width, 8);

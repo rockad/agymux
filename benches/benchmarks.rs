@@ -1,6 +1,6 @@
-use agymux::cli::Cli;
-use agymux::core::session::SessionDb;
-use agymux::core::transcript::TranscriptParser;
+use ax::cli::Cli;
+use ax::core::session::SessionDb;
+use ax::core::transcript::TranscriptParser;
 use clap::Parser;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rusqlite::Connection;

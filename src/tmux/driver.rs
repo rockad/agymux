@@ -246,6 +246,19 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         }
     }
 
+    /// Swap window silently (preserving focus with -d)
+    pub fn swap_window(&self, target: &str, destination: &str) -> Result<()> {
+        let mut args = vec!["swap-window", "-d"];
+        if !target.is_empty() {
+            args.extend_from_slice(&["-s", target]);
+        }
+        if !destination.is_empty() {
+            args.extend_from_slice(&["-t", destination]);
+        }
+        self.runner.run(&args)?;
+        Ok(())
+    }
+
     pub fn current_session(&self) -> Option<String> {
         let out = self
             .runner
@@ -448,6 +461,11 @@ impl TmuxDriver {
     /// Get a window option on target
     pub fn get_window_option(target: &str, key: &str) -> Result<Option<String>> {
         Self::client().get_window_option(target, key)
+    }
+
+    /// Swap window silently (preserving focus with -d)
+    pub fn swap_window(target: &str, destination: &str) -> Result<()> {
+        Self::client().swap_window(target, destination)
     }
 
     /// Attach to an existing tmux session
@@ -654,6 +672,7 @@ mod tests {
             &["show-options", "-w", "-t", ":1", "-v", "@conv_id"],
             "123\n",
         );
+        mock.add_response(&["swap-window", "-d", "-s", ":1", "-t", ":2"], "");
         mock.add_response(&["display-message", "-p", "#{session_name}"], "agy-test\n");
         mock.add_response(&["display-message", "-p", "#{window_name}"], "main\n");
 
@@ -667,6 +686,7 @@ mod tests {
             client.get_window_option(":1", "@conv_id").unwrap(),
             Some("123".to_string())
         );
+        assert!(client.swap_window(":1", ":2").is_ok());
         assert_eq!(client.current_session(), Some("agy-test".to_string()));
         assert_eq!(client.current_window_name(), Some("main".to_string()));
     }

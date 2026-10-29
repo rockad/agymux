@@ -1,7 +1,7 @@
 VERSION ?= $(shell cargo metadata --no-deps --format-version 1 2>/dev/null | jq -r '.packages[0].version' || sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
 TARGET ?= $(shell rustc -Vv | sed -n 's/^host: //p')
 DIST_DIR ?= dist
-PKG_NAME = agymux-v$(VERSION)-$(TARGET)
+PKG_NAME = ax-v$(VERSION)-$(TARGET)
 PKG_DIR = $(DIST_DIR)/$(PKG_NAME)
 
 .PHONY: all build check test lint fmt fmt-check bench clean dist package checksums install uninstall cross-check cross-build changelog bump release help
@@ -9,7 +9,7 @@ PKG_DIR = $(DIST_DIR)/$(PKG_NAME)
 all: build
 
 help:
-	@echo "agymux makefile targets:"
+	@echo "ax makefile targets:"
 	@echo "  build         - Build release binaries for host target"
 	@echo "  check         - Run cargo check across all targets and features"
 	@echo "  test          - Run test suite across all targets and features"
@@ -21,8 +21,8 @@ help:
 	@echo "  checksums     - Regenerate SHA256SUMS for all archives in dist/"
 	@echo "  cross-check   - Run cross check for musl and aarch64 targets"
 	@echo "  cross-build   - Build musl and aarch64 release binaries using cross"
-	@echo "  install       - Install agymux and ax into ~/.local/bin"
-	@echo "  uninstall     - Remove agymux and ax from ~/.local/bin"
+	@echo "  install       - Install ax into ~/.local/bin and symlink agymux and agemux"
+	@echo "  uninstall     - Remove ax, agymux, and agemux from ~/.local/bin"
 	@echo "  changelog     - Generate CHANGELOG.md via git-cliff"
 	@echo "  release       - Bump version according to semver and tag release"
 	@echo "  clean         - Clean build target directory and dist/"
@@ -92,14 +92,15 @@ cross-build:
 
 install: build
 	@mkdir -p $(HOME)/.local/bin
-	@rm -f $(HOME)/.local/bin/agymux $(HOME)/.local/bin/ax
-	@cp target/release/agymux $(HOME)/.local/bin/
-	@cp target/release/ax $(HOME)/.local/bin/
-	@echo "Installed agymux and ax to $(HOME)/.local/bin"
+	@rm -f $(HOME)/.local/bin/ax $(HOME)/.local/bin/agymux $(HOME)/.local/bin/agemux
+	@cp target/release/ax $(HOME)/.local/bin/ax
+	@ln -sf $(HOME)/.local/bin/ax $(HOME)/.local/bin/agymux
+	@ln -sf $(HOME)/.local/bin/ax $(HOME)/.local/bin/agemux
+	@echo "Installed ax and symlinked agymux and agemux in $(HOME)/.local/bin"
 
 uninstall:
-	@rm -f $(HOME)/.local/bin/agymux $(HOME)/.local/bin/ax
-	@echo "Removed agymux and ax from $(HOME)/.local/bin"
+	@rm -f $(HOME)/.local/bin/ax $(HOME)/.local/bin/agymux $(HOME)/.local/bin/agemux
+	@echo "Removed ax, agymux, and agemux from $(HOME)/.local/bin"
 
 changelog:
 	@which git-cliff >/dev/null 2>&1 && git-cliff --output CHANGELOG.md || bun x git-cliff --output CHANGELOG.md

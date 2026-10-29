@@ -1,8 +1,8 @@
-use agymux::cli::{Cli, Commands};
-use agymux::config::Config;
-use agymux::core::session::{get_conversation_mtime_and_steps, latest_conversation_id};
-use agymux::ui::palette::{PaletteAction, PaletteItem, PaletteState};
-use agymux::{build_agy_args, is_remote_control_active, resolve_effective_remote_control};
+use ax::cli::{Cli, Commands};
+use ax::config::Config;
+use ax::core::session::{get_conversation_mtime_and_steps, latest_conversation_id};
+use ax::ui::palette::{PaletteAction, PaletteItem, PaletteState};
+use ax::{build_agy_args, is_remote_control_active, resolve_effective_remote_control};
 use clap::Parser;
 use rusqlite::Connection;
 
@@ -87,7 +87,7 @@ fn test_cli_remote_control_flags() {
         .expect("parsing succeeds");
     assert!(cli_run.remote_control);
     match cli_run.command {
-        Some(Commands::Run { args }) => {
+        Some(Commands::Run { args, .. }) => {
             assert_eq!(args, vec!["-c", "cid-123"]);
         }
         other => panic!("expected Commands::Run, got {:?}", other),
@@ -98,7 +98,7 @@ fn test_cli_remote_control_flags() {
         Cli::try_parse_from(["agymux", "run", "--", "--remote-control", "-c", "cid-123"])
             .expect("parsing succeeds");
     match cli_run_forwarded.command {
-        Some(Commands::Run { args }) => {
+        Some(Commands::Run { args, .. }) => {
             assert!(args.contains(&"--remote-control".to_string()));
             assert!(args.contains(&"cid-123".to_string()));
         }
@@ -293,14 +293,14 @@ fn test_watcher_phase1_bound_id_exclusion() {
 
 #[test]
 fn test_sanitize_title_length_and_characters() {
-    assert_eq!(agymux::sanitize_title("Short"), "Short");
+    assert_eq!(ax::sanitize_title("Short"), "Short");
     assert_eq!(
-        agymux::sanitize_title("This is a title that is quite long and descriptive"),
+        ax::sanitize_title("This is a title that is quite long and descriptive"),
         "This is a title that is quite"
     );
-    assert_eq!(agymux::sanitize_title("   "), "agy");
+    assert_eq!(ax::sanitize_title("   "), "agy");
     assert_eq!(
-        agymux::sanitize_title("Hello / World : Test !"),
+        ax::sanitize_title("Hello / World : Test !"),
         "Hello  World  Test"
     );
 }

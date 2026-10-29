@@ -3,12 +3,12 @@ use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "agymux",
+    name = "ax",
     author = "Aleksandr Korolev",
     version,
     disable_version_flag = true,
-    about = "OpenCode-style tabbed cockpit for Google Antigravity",
-    long_about = "A high-performance terminal multiplexer workspace manager for Google Antigravity (agy). Provides multi-turn tab navigation, instant window naming, and rich session search inside tmux."
+    about = "OpenCode-style tabbed cockpit for Google Antigravity & Claude Code (agEmux)",
+    long_about = "A high-performance terminal multiplexer workspace manager for Google Antigravity (agy) and Claude Code (claude). Provides multi-turn tab navigation, instant window naming, and rich session search inside tmux."
 )]
 pub struct Cli {
     /// Print version information
@@ -70,14 +70,22 @@ pub enum Commands {
         #[arg(short = 'n', long = "name")]
         name: Option<String>,
 
-        /// Arguments forwarded to agy
+        /// Target agent harness (agy, claude, term)
+        #[arg(short = 'H', long = "harness", default_value = "agy")]
+        harness: String,
+
+        /// Arguments forwarded to command
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
 
     /// Internal process runner with instant prompt-based window naming
     Run {
-        /// Arguments passed to agy
+        /// Target agent harness (agy, claude, term)
+        #[arg(short = 'H', long = "harness", default_value = "agy")]
+        harness: String,
+
+        /// Arguments passed to harness command
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         args: Vec<String>,
     },
@@ -220,11 +228,25 @@ mod tests {
 
     #[test]
     fn test_cli_new_subcommand() {
-        let cli = Cli::try_parse_from(["agymux", "new", "-n", "feature-tab", "--", "-c"])
-            .expect("parsing succeeds");
+        let cli = Cli::try_parse_from([
+            "agymux",
+            "new",
+            "-n",
+            "feature-tab",
+            "-H",
+            "claude",
+            "--",
+            "-c",
+        ])
+        .expect("parsing succeeds");
         match cli.command {
-            Some(Commands::New { name, args }) => {
+            Some(Commands::New {
+                name,
+                harness,
+                args,
+            }) => {
                 assert_eq!(name.as_deref(), Some("feature-tab"));
+                assert_eq!(harness, "claude");
                 assert_eq!(args, vec!["-c"]);
             }
             other => panic!("expected New, got {:?}", other),
@@ -233,11 +255,20 @@ mod tests {
 
     #[test]
     fn test_cli_run_subcommand() {
-        let cli =
-            Cli::try_parse_from(["agymux", "run", "--", "--conversation", "uuid-123", "hello"])
-                .expect("parsing succeeds");
+        let cli = Cli::try_parse_from([
+            "agymux",
+            "run",
+            "-H",
+            "term",
+            "--",
+            "--conversation",
+            "uuid-123",
+            "hello",
+        ])
+        .expect("parsing succeeds");
         match cli.command {
-            Some(Commands::Run { args }) => {
+            Some(Commands::Run { harness, args }) => {
+                assert_eq!(harness, "term");
                 assert_eq!(args, vec!["--conversation", "uuid-123", "hello"]);
             }
             other => panic!("expected Run, got {:?}", other),

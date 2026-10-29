@@ -106,6 +106,12 @@ pub fn run() -> Result<()> {
                     "break" | "break-pane" => ui::palette::PaletteAction::BreakPane,
                     "copy" | "copy-mode" | "scroll" => ui::palette::PaletteAction::CopyMode,
                     "close-pane" | "kill-pane" => ui::palette::PaletteAction::ClosePane,
+                    "claude" | "new-claude" => ui::palette::PaletteAction::NewClaudeSession,
+                    "agy" | "antigravity" | "new-agy" => {
+                        ui::palette::PaletteAction::NewAntigravitySession
+                    }
+                    "move-left" | "tab-left" => ui::palette::PaletteAction::MoveTabLeft,
+                    "move-right" | "tab-right" => ui::palette::PaletteAction::MoveTabRight,
                     other => bail!("Unknown palette action: {}", other),
                 };
                 ui::palette::execute_action(act, Some(&project))?;
@@ -122,8 +128,16 @@ pub fn run() -> Result<()> {
             run_bind(&project, &dir, conversation_id)?;
         }
 
-        Some(Commands::New { name, args }) => {
-            let tab_name = name.unwrap_or_else(|| "+ new".to_string());
+        Some(Commands::New {
+            name,
+            harness,
+            args,
+        }) => {
+            let agent_harness = crate::core::AgentHarness::from_str_loose(&harness);
+            let tab_name = name.unwrap_or_else(|| match agent_harness {
+                crate::core::AgentHarness::PlainTerminal => "term".to_string(),
+                _ => "+ new".to_string(),
+            });
             let requested_rc = remote_control || args.contains(&"--remote-control".to_string());
             let mut effective_remote_control = requested_rc;
             if requested_rc
@@ -142,7 +156,11 @@ pub fn run() -> Result<()> {
                     eprintln!("agymux: Active remote-control instance already running on this machine (skipping --remote-control)");
                 }
             }
-            let mut run_args = format!("agymux run --project '{}'", project);
+            let mut run_args = format!(
+                "agymux run -H {} --project '{}'",
+                agent_harness.as_str(),
+                project
+            );
             if effective_remote_control {
                 run_args.push_str(" --remote-control");
             }
@@ -187,9 +205,9 @@ pub fn run() -> Result<()> {
             }
         }
 
-        Some(Commands::Run { args }) => {
+        Some(Commands::Run { harness, args }) => {
             let rc = remote_control || args.contains(&"--remote-control".to_string());
-            run_runner(&project, args, rc, &config)?;
+            run_runner(&project, args, rc, &harness, &config)?;
         }
 
         Some(Commands::Preview { conversation_id }) => {
@@ -262,6 +280,7 @@ fn handle_attach(
                             project,
                             args.to_vec(),
                             effective_remote_control,
+                            "agy",
                             config,
                         );
                     }
@@ -353,7 +372,13 @@ fn handle_attach(
             .args(["set", "-t", target_session, "status", status_val])
             .status();
         let _ = Command::new("tmux")
-            .args(["set", "-t", target_session, "status-position", effective_pos])
+            .args([
+                "set",
+                "-t",
+                target_session,
+                "status-position",
+                effective_pos,
+            ])
             .status();
 
         if std::env::var("TMUX").is_ok() {
@@ -364,6 +389,7 @@ fn handle_attach(
                         project,
                         vec!["-c".to_string()],
                         effective_remote_control,
+                        "agy",
                         config,
                     );
                 }
@@ -978,8 +1004,10 @@ fn run_runner(
     project: &str,
     args: Vec<String>,
     remote_control: bool,
+    harness: &str,
     config: &Config,
 ) -> Result<()> {
+    let agent_harness = crate::core::AgentHarness::from_str_loose(harness);
     let in_tmux = std::env::var("TMUX").is_ok();
     let mut conv_id = None;
     let mut initial_prompt = None;
@@ -1067,11 +1095,12 @@ fn run_runner(
         let rc_val = if effective_remote_control { "1" } else { "0" };
         let win_target = target_window.as_deref().unwrap_or("");
         let _ = tmux::TmuxDriver::set_window_option(win_target, "@remote_control", rc_val);
+        let _ = tmux::TmuxDriver::set_window_option(win_target, "@harness", agent_harness.as_str());
 
         if let Some(ref cid) = conv_id {
             let _ = tmux::TmuxDriver::set_window_option(win_target, "@conversation_id", cid);
             if let Some(ref win) = target_window {
-                let _ = crate::core::TabRegistry::bind_static(win, cid);
+                let _ = crate::core::TabRegistry::bind_with_harness_static(win, cid, agent_harness);
             }
 
             let db = db_path();
@@ -1091,29 +1120,57 @@ fn run_runner(
         } else if let Some(ref prompt) = initial_prompt {
             let clean_prompt = sanitize_title(prompt);
             let _ = tmux::TmuxDriver::rename_window(win_target, &clean_prompt);
+            if let Some(ref win) = target_window {
+                let _ = crate::core::TabRegistry::set_harness_static(win, agent_harness);
+            }
         } else {
-            let _ = tmux::TmuxDriver::rename_window(win_target, "+ new");
+            let initial_name = match agent_harness {
+                crate::core::AgentHarness::PlainTerminal => "term",
+                _ => "+ new",
+            };
+            let _ = tmux::TmuxDriver::rename_window(win_target, initial_name);
+            if let Some(ref win) = target_window {
+                let _ = crate::core::TabRegistry::set_harness_static(win, agent_harness);
+            }
         }
     }
 
     // 2. Background detached watcher retired: turn-driven tab titles are updated via agymux hook on Stop
 
-    // 3. Assemble and execute agy
-    let mut cmd = Command::new("agy");
-    let forward_args = build_agy_args(
-        project,
-        &args,
-        conv_id.as_deref(),
-        has_continue_flag,
-        effective_remote_control,
-    );
-    cmd.args(&forward_args);
+    // 3. Assemble and execute harness command
+    let mut cmd = match agent_harness {
+        crate::core::AgentHarness::Antigravity => {
+            let mut c = Command::new("agy");
+            let forward_args = build_agy_args(
+                project,
+                &args,
+                conv_id.as_deref(),
+                has_continue_flag,
+                effective_remote_control,
+            );
+            c.args(&forward_args);
+            c
+        }
+        crate::core::AgentHarness::ClaudeCode => {
+            let mut c = Command::new("claude");
+            c.args(&args);
+            c
+        }
+        crate::core::AgentHarness::PlainTerminal => {
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+            let mut c = Command::new(shell);
+            if !args.is_empty() {
+                c.args(&args);
+            }
+            c
+        }
+    };
 
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
         let err = cmd.exec();
-        eprintln!("Failed to execute agy: {}", err);
+        eprintln!("Failed to execute {}: {}", agent_harness.as_str(), err);
         std::process::exit(1);
     }
 

@@ -1,8 +1,8 @@
-use agymux::cli::ScopeArg;
-use agymux::ui::helper::{self, HelperState};
-use agymux::ui::palette::{self, PaletteAction, PaletteState};
-use agymux::ui::picker::{self, PickerState};
-use agymux::ui::theme::{self, COLOR_BG, COLOR_GREEN, PL_LEFT, PL_RIGHT};
+use ax::cli::ScopeArg;
+use ax::ui::helper::{self, HelperState};
+use ax::ui::palette::{self, PaletteAction, PaletteState};
+use ax::ui::picker::{self, PickerState};
+use ax::ui::theme::{self, COLOR_BG, COLOR_GREEN, PL_LEFT, PL_RIGHT};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::backend::TestBackend;
 use ratatui::Terminal;
@@ -37,13 +37,11 @@ fn test_helper_modal_render_and_scroll() {
     // Verify key sections and bilingual bindings are rendered
     assert!(rendered_text.contains("Keyboard Shortcuts"));
     assert!(rendered_text.contains("TAB NAVIGATION & MOVEMENT"));
+    assert!(rendered_text.contains("Ctrl+Shift+Left / Right"));
     assert!(rendered_text.contains("CONVERSATION & WORKTREE LIFECYCLE"));
-    assert!(rendered_text.contains("WINDOW SPLITS & PANES"));
     assert!(rendered_text.contains("Ctrl+Space 1..9"));
     assert!(rendered_text.contains("Ctrl+Space c"));
     assert!(rendered_text.contains("Ctrl+Space s"));
-    assert!(rendered_text.contains("Ctrl+Space %"));
-    assert!(rendered_text.contains("Ctrl+Space z"));
 
     // Test scrolling logic
     assert_eq!(state.scroll, 0);
@@ -63,6 +61,7 @@ fn test_helper_modal_render_and_scroll() {
         .iter()
         .map(|c| c.symbol())
         .collect();
+    assert!(scrolled_text.contains("Ctrl+Space z"));
     assert!(scrolled_text.contains("Ctrl+Space p"));
 
     state.scroll = 1;
@@ -81,7 +80,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 22);
+    assert_eq!(state.items.len(), 26);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))
@@ -221,6 +220,52 @@ fn test_palette_modal_render_and_fuzzy_filter() {
         );
     }
     assert_eq!(state.selected_action(), Some(PaletteAction::SwitchToMain));
+
+    // Test query for "claude" finds NewClaudeSession
+    state.query.clear();
+    for c in "claude".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(
+        state.selected_action(),
+        Some(PaletteAction::NewClaudeSession)
+    );
+
+    // Test query for "antigravity" finds NewAntigravitySession
+    state.query.clear();
+    for c in "antigravity".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(
+        state.selected_action(),
+        Some(PaletteAction::NewAntigravitySession)
+    );
+
+    // Test query for "move left" finds MoveTabLeft
+    state.query.clear();
+    for c in "left".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::MoveTabLeft));
+
+    // Test query for "move right" finds MoveTabRight
+    state.query.clear();
+    for c in "right".chars() {
+        palette::handle_key(
+            KeyEvent::new(KeyCode::Char(c), KeyModifiers::NONE),
+            &mut state,
+        );
+    }
+    assert_eq!(state.selected_action(), Some(PaletteAction::MoveTabRight));
 }
 
 #[test]

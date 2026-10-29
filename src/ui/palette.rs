@@ -37,6 +37,10 @@ pub enum PaletteAction {
     BreakPane,
     CopyMode,
     ClosePane,
+    NewClaudeSession,
+    NewAntigravitySession,
+    MoveTabLeft,
+    MoveTabRight,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +186,30 @@ impl PaletteItem {
                 shortcut: "Palette",
                 mnemonic: None,
             },
+            PaletteItem {
+                action: PaletteAction::NewClaudeSession,
+                title: "New Claude Code Session",
+                shortcut: "Ctrl+Space c",
+                mnemonic: Some('c'),
+            },
+            PaletteItem {
+                action: PaletteAction::NewAntigravitySession,
+                title: "New Antigravity Session",
+                shortcut: "Ctrl+Space n",
+                mnemonic: Some('n'),
+            },
+            PaletteItem {
+                action: PaletteAction::MoveTabLeft,
+                title: "Move Tab Left",
+                shortcut: "Ctrl+Shift+Left",
+                mnemonic: None,
+            },
+            PaletteItem {
+                action: PaletteAction::MoveTabRight,
+                title: "Move Tab Right",
+                shortcut: "Ctrl+Shift+Right",
+                mnemonic: None,
+            },
         ]
     }
 }
@@ -313,6 +341,30 @@ impl PaletteState {
                             || "pane".contains(&q)
                             || q == "kill-pane"
                             || q == "killpane"
+                    }
+                    PaletteAction::NewClaudeSession => {
+                        "claude".contains(&q) || "new".contains(&q) || q == "c" || q == "с"
+                    }
+                    PaletteAction::NewAntigravitySession => {
+                        "agy".contains(&q)
+                            || "antigravity".contains(&q)
+                            || "new".contains(&q)
+                            || q == "n"
+                            || q == "т"
+                    }
+                    PaletteAction::MoveTabLeft => {
+                        "move".contains(&q)
+                            || "left".contains(&q)
+                            || "swap".contains(&q)
+                            || q == "<"
+                            || q == "б"
+                    }
+                    PaletteAction::MoveTabRight => {
+                        "move".contains(&q)
+                            || "right".contains(&q)
+                            || "swap".contains(&q)
+                            || q == ">"
+                            || q == "ю"
                     }
                     _ => false,
                 }
@@ -818,6 +870,36 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
         PaletteAction::ClosePane => {
             let _ = Command::new("tmux")
                 .args(["confirm-before", "-p", "kill-pane #P? (y/n)", "kill-pane"])
+                .status();
+        }
+        PaletteAction::NewClaudeSession => {
+            let _ = Command::new("tmux")
+                .args([
+                    "new-window",
+                    "-n",
+                    "+ new",
+                    &format!("agymux run -H claude --project '{}'", proj),
+                ])
+                .status();
+        }
+        PaletteAction::NewAntigravitySession => {
+            let _ = Command::new("tmux")
+                .args([
+                    "new-window",
+                    "-n",
+                    "+ new",
+                    &format!("agymux run -H agy --project '{}'", proj),
+                ])
+                .status();
+        }
+        PaletteAction::MoveTabLeft => {
+            let _ = Command::new("tmux")
+                .args(["swap-window", "-d", "-t", "-1"])
+                .status();
+        }
+        PaletteAction::MoveTabRight => {
+            let _ = Command::new("tmux")
+                .args(["swap-window", "-d", "-t", "+1"])
                 .status();
         }
     }
