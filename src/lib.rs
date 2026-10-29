@@ -338,17 +338,22 @@ fn handle_attach(
         } else {
             "2"
         };
+        let effective_pos = if config.theme.tabs.position != "bottom" {
+            &config.theme.tabs.position
+        } else {
+            &config.theme.status_position
+        };
         let _ = Command::new("tmux")
             .args(["set", "-g", "status", status_val])
             .status();
         let _ = Command::new("tmux")
-            .args(["set", "-g", "status-position", "top"])
+            .args(["set", "-g", "status-position", effective_pos])
             .status();
         let _ = Command::new("tmux")
             .args(["set", "-t", target_session, "status", status_val])
             .status();
         let _ = Command::new("tmux")
-            .args(["set", "-t", target_session, "status-position", "top"])
+            .args(["set", "-t", target_session, "status-position", effective_pos])
             .status();
 
         if std::env::var("TMUX").is_ok() {

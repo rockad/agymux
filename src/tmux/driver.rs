@@ -336,12 +336,12 @@ impl<R: TmuxCommandRunner> TmuxClient<R> {
         } else {
             "2"
         };
-        let effective_position = if config.theme.tabs.position != "top" {
+        let effective_position = if config.theme.tabs.position != "bottom" {
             &config.theme.tabs.position
-        } else if config.theme.status_position != "top" {
+        } else if config.theme.status_position != "bottom" {
             &config.theme.status_position
         } else {
-            "top"
+            "bottom"
         };
 
         let conf_path = crate::tmux::TmuxProfile::generate(config, name)?;

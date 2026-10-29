@@ -32,9 +32,9 @@ impl TmuxProfile {
         ];
 
         // Status bar layout (inherits terminal background and foreground by default)
-        let effective_position = if config.theme.tabs.position != "top" {
+        let effective_position = if config.theme.tabs.position != "bottom" {
             &config.theme.tabs.position
-        } else if config.theme.status_position != "top" {
+        } else if config.theme.status_position != "bottom" {
             &config.theme.status_position
         } else {
             &config.theme.tabs.position
@@ -277,7 +277,7 @@ mod tests {
         ] {
             let line = content
                 .lines()
-                .find(|l| l.contains(line_key))
+                .find(|l| l.starts_with(&format!("set -g {} ", line_key)) || l.starts_with(&format!("setw -g {} ", line_key)))
                 .unwrap_or_else(|| panic!("{} found", line_key));
             let mut idx = 0;
             while let Some(open) = line[idx..].find("#[") {
@@ -312,9 +312,9 @@ mod tests {
         assert!(content
             .contains("setw -g window-status-current-format \"#[fg=colour234]#[bg=colour73]#[bold] #I #{=22:window_name}#{?#{@remote_control}, 󰢹,}#[range=user|close:#{window_id}] 󰅖#[norange] #[default]\""));
         assert!(content.contains("set -g status-left \"#{?#{client_prefix},#[fg=black]#[bg=brightred]#[bold] 󰘳 PREFIX #[default] ,}\""));
-        assert!(content.contains("set -g status-position top"));
+        assert!(content.contains("set -g status-position bottom"));
         assert!(content.contains("set -g status 2"));
-        assert!(content.contains("set -g \"status-format[1]\" \"#[bg=default,fill= ] \""));
+        assert!(content.contains("set -g \"status-format[0]\" \"#[bg=default,fill= ] \""));
         assert!(content.contains("set -g prefix C-Space"));
         assert!(content.contains("bind-key -T root MouseDown1Status"));
         assert!(content.contains("bind-key -T root MouseDown2Status"));

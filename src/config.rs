@@ -119,7 +119,7 @@ pub struct TabsConfig {
 }
 
 fn default_tab_position() -> String {
-    "top".to_string()
+    "bottom".to_string()
 }
 fn default_tab_layout() -> String {
     "horizontal".to_string()
@@ -195,7 +195,7 @@ fn default_false() -> bool {
     false
 }
 fn default_status_position() -> String {
-    "top".to_string()
+    "bottom".to_string()
 }
 fn default_prefix() -> String {
     "C-Space".to_string()
@@ -330,7 +330,7 @@ mod tests {
         assert!(config.general.single_remote_control_instance);
         assert_eq!(config.theme.preset, "default");
         assert!(!config.theme.rounded_pills);
-        assert_eq!(config.theme.status_position, "top");
+        assert_eq!(config.theme.status_position, "bottom");
         assert_eq!(config.keybindings.prefix, "C-Space");
         assert!(config.keybindings.bilingual_cyrillic);
         assert!(!config.tmux.isolated_socket);
@@ -499,7 +499,7 @@ default_effort = "low"
     #[test]
     fn test_tabs_config_defaults() {
         let tabs = TabsConfig::default();
-        assert_eq!(tabs.position, "top");
+        assert_eq!(tabs.position, "bottom");
         assert_eq!(tabs.layout, "horizontal");
         assert_eq!(tabs.sidebar_position, "left");
         assert_eq!(tabs.spacer_lines, 1);
