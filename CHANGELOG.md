@@ -1,8 +1,22 @@
+## [0.6.0] - 2026-10-29
+
+### 🚀 Features
+
+- *(theme)* Set status-position default to bottom and remove top hardcode
+- Multi-harness engine (claude/agy), top tabs layout, silent drag reorder, rebrand to ax
+
+### 🐛 Bug Fixes
+
+- *(build)* Ensure make install cleanly overwrites existing binaries or symlinks
 ## [0.5.0] - 2026-10-28
 
 ### 🚀 Features
 
 - *(core)* Unify tab registry, race-free mouse close, and consolidate tmux driver
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bump version to 0.5.0
 ## [0.4.0] - 2026-10-28
 
 ### 🚀 Features
