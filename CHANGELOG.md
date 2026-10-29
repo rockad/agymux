@@ -1,8 +1,17 @@
+## [0.6.2] - 2026-10-29
+
+### 🐛 Bug Fixes
+
+- *(profile)* Explicitly set status-format[0] and unset status-format[1] on reload
 ## [0.6.1] - 2026-10-29
 
 ### 🚀 Features
 
 - *(reload)* Add ax reload subcommand, Ctrl+Space R binding, and fix CI clippy checks
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bump version to 0.6.1
 ## [0.6.0] - 2026-10-29
 
 ### 🚀 Features
