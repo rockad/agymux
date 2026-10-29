@@ -1,3 +1,8 @@
+## [0.6.1] - 2026-10-29
+
+### 🚀 Features
+
+- *(reload)* Add ax reload subcommand, Ctrl+Space R binding, and fix CI clippy checks
 ## [0.6.0] - 2026-10-29
 
 ### 🚀 Features
@@ -8,6 +13,10 @@
 ### 🐛 Bug Fixes
 
 - *(build)* Ensure make install cleanly overwrites existing binaries or symlinks
+
+### ⚙️ Miscellaneous Tasks
+
+- *(release)* Bump version to 0.6.0
 ## [0.5.0] - 2026-10-28
 
 ### 🚀 Features
