@@ -222,6 +222,10 @@ pub fn run() -> Result<()> {
             run_close_window(target.as_deref())?;
         }
 
+        Some(Commands::Reload) => {
+            run_reload(&session_name, &config)?;
+        }
+
         Some(Commands::Hook) => {
             run_hook()?;
         }
@@ -1476,6 +1480,52 @@ pub fn run_close_window(target: Option<&str>) -> Result<()> {
     }
 
     Ok(())
+}
+
+pub fn run_reload(default_session: &str, config: &Config) -> Result<()> {
+    let active_session = Command::new("tmux")
+        .args(["display-message", "-p", "#{session_name}"])
+        .output()
+        .ok()
+        .and_then(|out| {
+            if out.status.success() {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !s.is_empty() {
+                    Some(s)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| default_session.to_string());
+
+    let conf_path = crate::tmux::TmuxProfile::generate(config, &active_session)?;
+    let status = Command::new("tmux")
+        .args(["source-file", conf_path.to_str().unwrap()])
+        .status()?;
+
+    // Clear any lingering session-level overrides on status-position or status
+    let _ = Command::new("tmux")
+        .args(["set-option", "-u", "-t", &active_session, "status-position"])
+        .status();
+    let _ = Command::new("tmux")
+        .args(["set-option", "-u", "-t", &active_session, "status"])
+        .status();
+
+    if status.success() {
+        let _ = Command::new("tmux")
+            .args(["display-message", "ax: configuration reloaded"])
+            .status();
+        println!(
+            "Successfully reloaded ax configuration for session '{}'",
+            active_session
+        );
+        Ok(())
+    } else {
+        bail!("Failed to reload tmux configuration from {:?}", conf_path);
+    }
 }
 
 /// Install or update agymux tab sync lifecycle hook in ~/.gemini/config/hooks.json

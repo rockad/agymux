@@ -128,9 +128,10 @@ pub fn render(f: &mut Frame, area: Rect, state: &HelperState) {
         "Ctrl+Space w  /  ц",
         "New git worktree tab (.worktrees/<branch>)",
     ));
+    text_lines.push(shortcut_line("Ctrl+Space r  /  к", "Rename active tab"));
     text_lines.push(shortcut_line(
-        "Ctrl+Space r  /  R  /  к  /  К",
-        "Rename active tab",
+        "Ctrl+Space R  /  К",
+        "Reload ax configuration & layout",
     ));
     text_lines.push(shortcut_line(
         "Ctrl+Space f  /  а",

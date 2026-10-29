@@ -41,6 +41,7 @@ pub enum PaletteAction {
     NewAntigravitySession,
     MoveTabLeft,
     MoveTabRight,
+    ReloadConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +210,12 @@ impl PaletteItem {
                 title: "Move Tab Right",
                 shortcut: "Ctrl+Shift+Right",
                 mnemonic: None,
+            },
+            PaletteItem {
+                action: PaletteAction::ReloadConfig,
+                title: "Reload ax Configuration",
+                shortcut: "Ctrl+Space R / К",
+                mnemonic: Some('R'),
             },
         ]
     }
@@ -901,6 +908,45 @@ pub fn execute_action(action: PaletteAction, project: Option<&str>) -> anyhow::R
             let _ = Command::new("tmux")
                 .args(["swap-window", "-d", "-t", "+1"])
                 .status();
+        }
+        PaletteAction::ReloadConfig => {
+            let active_session = Command::new("tmux")
+                .args(["display-message", "-p", "#{session_name}"])
+                .output()
+                .ok()
+                .and_then(|out| {
+                    if out.status.success() {
+                        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                        if !s.is_empty() {
+                            Some(s)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .unwrap_or_else(|| {
+                    project
+                        .map(|p| format!("ax-{}", p))
+                        .unwrap_or_else(|| "ax-default".to_string())
+                });
+
+            let config = crate::config::Config::load().unwrap_or_default();
+            if let Ok(conf_path) = crate::tmux::TmuxProfile::generate(&config, &active_session) {
+                let _ = Command::new("tmux")
+                    .args(["source-file", conf_path.to_str().unwrap()])
+                    .status();
+                let _ = Command::new("tmux")
+                    .args(["set-option", "-u", "-t", &active_session, "status-position"])
+                    .status();
+                let _ = Command::new("tmux")
+                    .args(["set-option", "-u", "-t", &active_session, "status"])
+                    .status();
+                let _ = Command::new("tmux")
+                    .args(["display-message", "ax: configuration reloaded"])
+                    .status();
+            }
         }
     }
     Ok(())

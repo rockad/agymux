@@ -80,7 +80,7 @@ fn test_palette_modal_render_and_fuzzy_filter() {
     let mut terminal = Terminal::new(backend).unwrap();
     let mut state = PaletteState::new();
 
-    assert_eq!(state.items.len(), 26);
+    assert_eq!(state.items.len(), 27);
 
     terminal
         .draw(|f| palette::render(f, f.area(), &state))

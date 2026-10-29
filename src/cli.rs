@@ -112,6 +112,9 @@ pub enum Commands {
         target: Option<String>,
     },
 
+    /// Reload configuration, theme, and keybindings in active session
+    Reload,
+
     /// Internal lifecycle hook invoked by Antigravity on turn stop
     #[command(hide = true)]
     Hook,
@@ -224,6 +227,9 @@ mod tests {
             Some(Commands::Palette { action }) => assert_eq!(action.as_deref(), Some("rename")),
             other => panic!("expected Palette rename, got {:?}", other),
         }
+
+        let cli_reload = Cli::try_parse_from(["ax", "reload"]).expect("parsing succeeds");
+        assert!(matches!(cli_reload.command, Some(Commands::Reload)));
     }
 
     #[test]

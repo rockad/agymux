@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum AgentHarness {
+    #[default]
     Antigravity,
     ClaudeCode,
     PlainTerminal,
@@ -40,12 +41,6 @@ impl AgentHarness {
             Self::ClaudeCode => "claude",
             Self::PlainTerminal => "$SHELL",
         }
-    }
-}
-
-impl Default for AgentHarness {
-    fn default() -> Self {
-        Self::Antigravity
     }
 }
 

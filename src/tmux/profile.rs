@@ -32,13 +32,12 @@ impl TmuxProfile {
         ];
 
         // Status bar layout (inherits terminal background and foreground by default)
-        let effective_position = if config.theme.tabs.position == "bottom" {
-            "bottom"
-        } else if config.theme.status_position == "bottom" {
-            "bottom"
-        } else {
-            "top"
-        };
+        let effective_position =
+            if config.theme.tabs.position == "bottom" || config.theme.status_position == "bottom" {
+                "bottom"
+            } else {
+                "top"
+            };
 
         lines.push(format!("set -g status-position {}", effective_position));
         if config.theme.tabs.spacer_lines == 0 {
@@ -163,7 +162,7 @@ impl TmuxProfile {
         lines.push("bind X confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
 
         lines.push("bind r command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
-        lines.push("bind R command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+        lines.push("bind R run-shell \"ax reload\"".to_string());
 
         lines.push("bind d detach-client".to_string());
         lines.push("bind D detach-client".to_string());
@@ -217,7 +216,7 @@ impl TmuxProfile {
             lines.push("bind Ч confirm-before -p \"Close tab #W? (y/n)\" kill-window".to_string());
 
             lines.push("bind к command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
-            lines.push("bind К command-prompt -I \"#W\" \"rename-window '%%'\"".to_string());
+            lines.push("bind К run-shell \"ax reload\"".to_string());
 
             lines.push("bind в detach-client".to_string());
             lines.push("bind В detach-client".to_string());
@@ -395,7 +394,7 @@ mod tests {
         assert!(content.contains("bind x confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind X confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind r command-prompt -I \"#W\" \"rename-window '%%'\""));
-        assert!(content.contains("bind R command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind R run-shell \"ax reload\""));
         assert!(content.contains("bind h display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind H display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind ? display-popup -E -w 75% -h 70% \"agymux helper\""));
@@ -433,7 +432,7 @@ mod tests {
         assert!(content.contains("bind ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind Ч confirm-before -p \"Close tab #W? (y/n)\" kill-window"));
         assert!(content.contains("bind к command-prompt -I \"#W\" \"rename-window '%%'\""));
-        assert!(content.contains("bind К command-prompt -I \"#W\" \"rename-window '%%'\""));
+        assert!(content.contains("bind К run-shell \"ax reload\""));
         assert!(content.contains("bind р display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind Р display-popup -E -w 75% -h 70% \"agymux helper\""));
         assert!(content.contains("bind е new-window -n \"term\" \"$SHELL\""));
