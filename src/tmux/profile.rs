@@ -39,15 +39,29 @@ impl TmuxProfile {
                 "top"
             };
 
+        let tab_format_expr = "#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?loop_last_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?loop_last_flag,,#{window-status-separator}}}#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]";
+
         lines.push(format!("set -g status-position {}", effective_position));
         if config.theme.tabs.spacer_lines == 0 {
             lines.push("set -g status on".to_string());
+            lines.push(format!(
+                "set -g \"status-format[0]\" \"{}\"",
+                tab_format_expr
+            ));
+            lines.push("set -ug \"status-format[1]\"".to_string());
         } else {
             lines.push("set -g status 2".to_string());
             if effective_position == "bottom" {
-                lines.push("set -g \"status-format[1]\" \"#[align=left range=left #{E:status-left-style}]#[push-default]#{T;=/#{status-left-length}:status-left}#[pop-default]#[norange default]#[list=on align=#{status-justify}]#[list=left-marker]<#[list=right-marker]>#[list=on]#{W:#[range=window|#{window_index} #{E:window-status-style}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-format}#[pop-default]#[norange default]#{?loop_last_flag,,#{window-status-separator}},#[range=window|#{window_index} list=focus #{?#{!=:#{E:window-status-current-style},default},#{E:window-status-current-style},#{E:window-status-style}}#{?#{&&:#{window_last_flag},#{!=:#{E:window-status-last-style},default}}, #{E:window-status-last-style},}#{?#{&&:#{window_bell_flag},#{!=:#{E:window-status-bell-style},default}}, #{E:window-status-bell-style},#{?#{&&:#{||:#{window_activity_flag},#{window_silence_flag}},#{!=:#{E:window-status-activity-style},default}}, #{E:window-status-activity-style},}}]#[push-default]#{T:window-status-current-format}#[pop-default]#[norange list=on default]#{?loop_last_flag,,#{window-status-separator}}}#[nolist align=right range=right #{E:status-right-style}]#[push-default]#{T;=/#{status-right-length}:status-right}#[pop-default]#[norange default]\"".to_string());
+                lines.push(format!(
+                    "set -g \"status-format[1]\" \"{}\"",
+                    tab_format_expr
+                ));
                 lines.push("set -g \"status-format[0]\" \"#[bg=default,fill= ] \"".to_string());
             } else {
+                lines.push(format!(
+                    "set -g \"status-format[0]\" \"{}\"",
+                    tab_format_expr
+                ));
                 lines.push("set -g \"status-format[1]\" \"#[bg=default,fill= ] \"".to_string());
             }
         }
@@ -518,7 +532,8 @@ mod tests {
         let content = TmuxProfile::render_content(&config);
         assert!(content.contains("set -g status on"));
         assert!(!content.contains("set -g status 2"));
-        assert!(!content.contains("status-format[1]"));
+        assert!(content.contains("set -g \"status-format[0]\""));
+        assert!(content.contains("set -ug \"status-format[1]\""));
     }
 
     #[test]
